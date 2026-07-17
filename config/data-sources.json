@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "reviewed_at": "2026-07-17",
+  "sources": [
+    {
+      "id": "naver-finance-news",
+      "name": "NAVER Finance News HTML",
+      "category": "news",
+      "status": "provisional",
+      "decision": "reuse_hana_hub_metadata_summary_and_source_link",
+      "allowed": {
+        "collect": true,
+        "store": true,
+        "display": true,
+        "redistribute": false,
+        "ai_input": true
+      },
+      "retention_days": 30,
+      "attribution": "NAVER 및 원문 언론사 링크",
+      "notes": [
+        "hana-hub의 finance.naver.com HTML 수집 방식을 재사용한다.",
+        "제목, 네이버 제공 요약문, 언론사, 게시 시각, 원문 링크만 저장하고 기사 본문은 저장하거나 재배포하지 않는다.",
+        "AI 결과는 별도 생성 요약으로 표시하고 항상 원문 링크와 출처를 함께 제공한다.",
+        "HTML 구조 변경, robots 정책, 서비스 약관 변경 시 수집을 중단할 수 있도록 독립 collector로 격리한다."
+      ],
+      "official_documents": [
+        "https://finance.naver.com/news/news_list.naver",
+        "https://policy.naver.com/policy/service.html"
+      ]
+    },
+    {
+      "id": "open-dart",
+      "name": "Open DART API",
+      "category": "disclosure",
+      "status": "provisional",
+      "decision": "metadata_and_structured_fields_with_source_link",
+      "allowed": {
+        "collect": true,
+        "store": true,
+        "display": true,
+        "redistribute": false,
+        "ai_input": true
+      },
+      "retention_days": null,
+      "attribution": "금융감독원 Open DART, 공시 원문 링크 우선",
+      "notes": [
+        "API가 제공하는 공시 목록과 구조화 필드를 저장하고 화면에 출처 및 원문 링크를 표시한다.",
+        "공시 해석은 추정임을 표시하며 제출 원문 자체의 재배포는 M0 범위에서 허용하지 않는다.",
+        "공개 배포 전 서비스 이용 목적과 확인 URL을 등록한 인증키 승인이 필요하다."
+      ],
+      "official_documents": [
+        "https://opendart.fss.or.kr/intro/main.do",
+        "https://opendart.fss.or.kr/intro/terms.do"
+      ]
+    },
+    {
+      "id": "kis-open-api",
+      "name": "Korea Investment & Securities Open API",
+      "category": "market",
+      "status": "provisional",
+      "decision": "primary_realtime_market_data_provider",
+      "allowed": {
+        "collect": true,
+        "store": true,
+        "display": true,
+        "redistribute": false,
+        "ai_input": true
+      },
+      "retention_days": 365,
+      "attribution": "한국투자증권 KIS Developers, 데이터 기준 시각 표시",
+      "notes": [
+        "hana-hub의 OAuth 토큰 캐시, 재발급 잠금과 국내 주식·지수 collector 구조를 재사용한다.",
+        "국내외 지수, 환율, 금리, 원자재 데이터는 KIS가 제공하는 상품별 API/TR을 매핑한다.",
+        "KIS 해외주식 현재가와 등락률을 수집하고 종목-업종 마스터와 결합해 미국 증시 업종 히트맵을 생성한다.",
+        "원시 API 응답은 외부에 재배포하지 않고 화면에는 필요한 현재값, 등락률과 기준 시각만 표시한다.",
+        "계좌별 권한, 호출 한도와 실전/모의투자 도메인을 환경별로 분리한다."
+      ],
+      "official_documents": [
+        "https://apiportal.koreainvestment.com/"
+      ]
+    },
+    {
+      "id": "kcif",
+      "name": "KCIF 국제금융속보 PDF",
+      "category": "manual_document",
+      "status": "provisional",
+      "decision": "daily_pdf_download_extract_and_summarize",
+      "allowed": {
+        "collect": true,
+        "store": true,
+        "display": true,
+        "redistribute": false,
+        "ai_input": true
+      },
+      "retention_days": 30,
+      "attribution": "국제금융센터(KCIF), 원문 보고서 링크와 기준일 표시",
+      "collection_schedule": {
+        "timezone": "Asia/Seoul",
+        "times": ["06:00", "07:00", "07:30", "08:00", "08:30"],
+        "retry_policy": "retry_only_after_failure",
+        "skip_after_success_for_business_date": true,
+        "final_failure_after": "08:30"
+      },
+      "notes": [
+        "국제금융속보 목록에서 당일 PDF 링크를 찾고 다운로드해 텍스트를 추출한 뒤 AI 요약한다.",
+        "06:00, 07:00, 07:30, 08:00, 08:30에 실행하되 앞선 실행이 실패한 경우에만 다음 시각에 재시도한다.",
+        "business_date별 성공 기록이 있으면 같은 날의 나머지 예약 실행은 건너뛴다.",
+        "PDF 원문은 공개 재배포하지 않고 생성 요약, 출처, 보고서 기준일과 원문 링크만 표시한다.",
+        "PDF는 처리용 임시 파일로 사용하고 30일 이내 삭제한다."
+      ],
+      "official_documents": [
+        "https://www.kcif.or.kr/annual/newsflashList",
+        "https://www.gpters.org/wealth/post/7step-guide-automating-your-596ebN0wqXBUScG"
+      ]
+    }
+  ]
+}
