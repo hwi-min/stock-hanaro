@@ -43,7 +43,8 @@ def test_ping_is_answered():
 def test_subscription_status_requires_all_acknowledgements(monkeypatch):
     stream = MarketStream()
     websocket = FakeWebSocket()
-    monkeypatch.setattr(MarketStream, "expected_subscription_count", property(lambda _: 2))
+    stream.desired_symbols = {"005930"}
+    monkeypatch.setattr("app.realtime.market.INDEX_SUBSCRIPTIONS", {"0001": "KOSPI"})
     first = '{"header":{"tr_id":"H0STCNT0","tr_key":"005930"},"body":{"rt_cd":"0"}}'
     second = '{"header":{"tr_id":"H0UPCNT0","tr_key":"0001"},"body":{"rt_cd":"0"}}'
 
@@ -51,3 +52,35 @@ def test_subscription_status_requires_all_acknowledgements(monkeypatch):
     assert stream.connected is False
     asyncio.run(stream.handle(second, websocket))
     assert stream.connected is True
+
+
+def test_dynamic_subscription_is_shared_between_viewers():
+    stream = MarketStream()
+    stream.pinned_symbols = set()
+    stream.desired_symbols = set()
+
+    first = asyncio.run(stream.acquire("035420"))
+    second = asyncio.run(stream.acquire("035420"))
+
+    assert first["accepted"] is True
+    assert second["viewers"] == 2
+    assert asyncio.run(stream.command_queue.get()) == ("1", "035420")
+    assert stream.command_queue.empty()
+
+    asyncio.run(stream.release("035420"))
+    assert stream.command_queue.empty()
+    final = asyncio.run(stream.release("035420"))
+    assert final["viewers"] == 0
+    assert "035420" not in stream.desired_symbols
+    assert asyncio.run(stream.command_queue.get()) == ("2", "035420")
+
+
+def test_late_subscribe_ack_does_not_restore_released_symbol():
+    stream = MarketStream()
+    stream.desired_symbols.discard("035420")
+    websocket = FakeWebSocket()
+    ack = '{"header":{"tr_id":"H0STCNT0","tr_key":"035420"},"body":{"rt_cd":"0"}}'
+
+    asyncio.run(stream.handle(ack, websocket))
+
+    assert ("H0STCNT0", "035420") not in stream.accepted_subscriptions

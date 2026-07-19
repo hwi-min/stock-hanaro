@@ -30,6 +30,6 @@ export function Dashboard({ data }: { data: DashboardType }) {
       <Section title="중요 공시" href="/disclosures"><div className="table">{data.disclosures.map(item => <a className="disclosure-row" href={disclosureUrl(item)} target="_blank" rel="noopener noreferrer" key={item.id} aria-label={`${item.company} ${item.title} DART 원문 열기`}><b>{item.company}</b><span>{item.title}</span><em className={`badge ${item.importance}`}>{item.importance === "high" ? "중요" : "보통"}</em></a>)}</div></Section>
     </div>
 
-    <Section title="이슈별 뉴스 요약" href="/issues"><div className="cards issue-cards">{data.issues.map(item => <Link href={`/issues/${item.id}`} key={item.id}><span className="topic">{item.category}</span><h3>{item.title}</h3><p>{item.summary}</p><small>관련 기사 {item.article_count}건</small></Link>)}</div></Section>
+    <Section title="이슈별 뉴스 요약" href="/issues"><div className="cards issue-cards">{data.issues.map(item => <Link href={`/issues/${item.id}`} key={item.id}><span className="topic">{item.category}</span><h3>{item.title}</h3><p>{item.summary}</p><small>{item.summary_method === "extractive" ? "기사 기반 자동 발췌 · " : ""}관련 기사 {item.article_count}건</small></Link>)}</div></Section>
   </main>;
 }

@@ -38,17 +38,17 @@ export const fallbackDashboard: Dashboard = {
     { id: "bok-ppi", source: "bok", country: "KR", category: "물가", title: "한국 생산자물가지수", scheduled_at: "2026-07-20T06:00:00+09:00", importance: "medium", source_url: "https://www.bok.or.kr/portal/submain/submain/sts.do?menuNo=200094&viewType=SUBMAIN" },
   ],
   issues: [
-    { id: "cpi", title: "미국 물가 둔화 기대", summary: "인플레이션 둔화 흐름이 금리 인하 기대를 지지하고 있습니다.", sentiment: "positive", article_count: 24, category: "거시·금리", articles: [
+    { id: "cpi", title: "미국 물가 둔화 기대", summary: "인플레이션 둔화 흐름이 금리 인하 기대를 지지하고 있습니다.", sentiment: "positive", article_count: 24, category: "거시·금리", summary_method: "source_excerpt", articles: [
       { id:"cpi-1", title:"미국 소비자물가 둔화, 금리 경로에 관심", publisher:"연합뉴스", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:true },
       { id:"cpi-2", title:"인플레이션 압력 완화에 미국 증시 상승", publisher:"한국경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
       { id:"cpi-3", title:"시장 예상과 부합한 CPI, 연준 판단은", publisher:"매일경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
     ] },
-    { id: "hbm", title: "HBM 수요 기대", summary: "AI 가속기 수요가 국내 반도체 공급망에 우호적으로 작용할 가능성이 있습니다.", sentiment: "positive", article_count: 18, category: "반도체", articles: [
+    { id: "hbm", title: "HBM 수요 기대", summary: "AI 가속기 수요가 국내 반도체 공급망에 우호적으로 작용할 가능성이 있습니다.", sentiment: "positive", article_count: 18, category: "반도체", summary_method: "source_excerpt", articles: [
       { id:"hbm-1", title:"AI 서버 투자 확대에 HBM 수요 지속", publisher:"전자신문", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:true },
       { id:"hbm-2", title:"국내 반도체 공급망, 차세대 HBM 대응", publisher:"서울경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
       { id:"hbm-3", title:"글로벌 AI 투자와 메모리 업황 전망", publisher:"이데일리", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
     ] },
-    { id: "oil", title: "국제유가 상승", summary: "공급 불확실성으로 운송·화학 업종 비용 부담이 커질 수 있습니다.", sentiment: "negative", article_count: 15, category: "에너지", articles: [
+    { id: "oil", title: "국제유가 상승", summary: "공급 불확실성으로 운송·화학 업종 비용 부담이 커질 수 있습니다.", sentiment: "negative", article_count: 15, category: "에너지", summary_method: "source_excerpt", articles: [
       { id:"oil-1", title:"공급 우려에 국제유가 상승세", publisher:"아시아경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:true },
       { id:"oil-2", title:"유가 상승이 운송·화학 업종에 미칠 영향", publisher:"머니투데이", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
       { id:"oil-3", title:"지정학적 긴장과 원유 공급 전망", publisher:"뉴스1", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },

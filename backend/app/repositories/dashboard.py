@@ -1,4 +1,5 @@
 import re
+import json
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 
@@ -89,6 +90,34 @@ class DashboardRepository:
         return "주요 뉴스"
 
     def issues(self) -> list[dict]:
+        generated_rows = self.db.scalars(select(IssueSummary).order_by(desc(IssueSummary.generated_at))).all()
+        generated_result = []
+        for generated in generated_rows:
+            try:
+                article_ids = [int(value) for value in json.loads(generated.article_ids_json)]
+            except (TypeError, ValueError, json.JSONDecodeError):
+                continue
+            by_id = {row.id: row for row in self.db.scalars(select(NewsArticle).where(
+                NewsArticle.id.in_(article_ids),
+            )).all()}
+            articles = [by_id[value] for value in article_ids if value in by_id]
+            if not articles:
+                continue
+            generated_result.append({
+                "id": generated.issue_key, "title": generated.title, "summary": generated.summary,
+                "sentiment": generated.sentiment, "article_count": len(articles), "category": generated.category,
+                "summary_method": "extractive" if generated.model == "rule-based-extractive" else "ai",
+                "articles": [{
+                    "id": str(row.id), "title": row.title, "publisher": row.publisher or row.source,
+                    "published_at": aware(row.published_at or row.collected_at), "url": row.canonical_url,
+                    "is_representative": index == 0,
+                } for index, row in enumerate(articles)],
+            })
+            if len(generated_result) == 6:
+                break
+        if generated_result:
+            return generated_result
+
         rows = self.db.scalars(select(NewsArticle).order_by(
             desc(NewsArticle.published_at), desc(NewsArticle.collected_at),
         ).limit(30)).all()
@@ -108,6 +137,7 @@ class DashboardRepository:
                 "summary": generated.summary if generated else representative.summary or representative.title,
                 "sentiment": generated.sentiment if generated else "neutral",
                 "article_count": len(articles), "category": category,
+                "summary_method": "ai" if generated else "source_excerpt",
                 "articles": [{
                     "id": str(row.id), "title": row.title, "publisher": row.publisher or row.source,
                     "published_at": aware(row.published_at or row.collected_at), "url": row.canonical_url,

@@ -66,6 +66,7 @@ class IssueItem(BaseModel):
     sentiment: Literal["positive", "neutral", "negative"]
     article_count: int
     category: str
+    summary_method: Literal["extractive", "source_excerpt", "ai"]
     articles: list[RelatedArticle]
 
 

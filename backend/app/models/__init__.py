@@ -6,5 +6,6 @@ from app.models.economic_event import EconomicEvent
 from app.models.kcif_report import KcifReport
 from app.models.kis_token import KisToken
 from app.models.issue_summary import IssueSummary
+from app.models.stock_master import StockMaster
 
-__all__ = ["Disclosure", "EconomicEvent", "IssueSummary", "KcifReport", "KisToken", "MarketQuote", "NewsArticle", "PipelineRun"]
+__all__ = ["Disclosure", "EconomicEvent", "IssueSummary", "KcifReport", "KisToken", "MarketQuote", "NewsArticle", "PipelineRun", "StockMaster"]

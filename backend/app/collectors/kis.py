@@ -185,17 +185,23 @@ class KISClient:
             "price": price, "change": decimal_or_none(output.get("prdy_vrss")),
             "change_pct": decimal_or_none(output.get("prdy_ctrt")),
             "volume": decimal_or_none(output.get("acml_vol")),
+            "market_cap": decimal_or_none(output.get("hts_avls")),
+            "per": decimal_or_none(output.get("per")), "pbr": decimal_or_none(output.get("pbr")),
+            "foreign_ownership_pct": decimal_or_none(output.get("hts_frgn_ehrt")),
+            "high_52w": decimal_or_none(output.get("d250_hgpr")),
+            "low_52w": decimal_or_none(output.get("d250_lwpr")),
             "name": output.get("hts_kor_isnm"), "as_of": datetime.now(timezone.utc),
         }
 
-    async def domestic_daily_chart(self, symbol: str, days: int = 100) -> list[dict]:
+    async def domestic_chart(self, symbol: str, period: str = "D", days: int = 100) -> list[dict]:
         end = date.today()
-        start = end - timedelta(days=max(days * 2, 180))
+        lookback_days = {"D": max(days * 2, 180), "W": max(days * 10, 1095), "M": max(days * 40, 3650)}[period]
+        start = end - timedelta(days=lookback_days)
         data = await self._get(
             "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100",
             {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": symbol,
              "FID_INPUT_DATE_1": start.strftime("%Y%m%d"), "FID_INPUT_DATE_2": end.strftime("%Y%m%d"),
-             "FID_PERIOD_DIV_CODE": "D", "FID_ORG_ADJ_PRC": "0"},
+             "FID_PERIOD_DIV_CODE": period, "FID_ORG_ADJ_PRC": "0"},
         )
         rows = data.get("output2", [])[:days]
         return list(reversed([{
@@ -203,6 +209,9 @@ class KISClient:
             "high": decimal_or_none(row.get("stck_hgpr")), "low": decimal_or_none(row.get("stck_lwpr")),
             "close": decimal_or_none(row.get("stck_clpr")), "volume": decimal_or_none(row.get("acml_vol")),
         } for row in rows if decimal_or_none(row.get("stck_clpr")) is not None]))
+
+    async def domestic_daily_chart(self, symbol: str, days: int = 100) -> list[dict]:
+        return await self.domestic_chart(symbol, "D", days)
 
     async def domestic_minute_chart(self, symbol: str) -> list[dict]:
         data = await self._get(

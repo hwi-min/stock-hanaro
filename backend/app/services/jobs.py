@@ -16,11 +16,15 @@ from app.repositories.disclosures import DisclosureRepository
 from app.repositories.calendar import CalendarRepository
 from app.repositories.kcif import KcifRepository
 from app.services.ai_summary import AISummaryService
+from app.services.rule_based_issues import RuleBasedIssueService
+from app.collectors.stock_master import stock_master_collector
+from app.repositories.stock_master import StockMasterRepository
 
 
 SUPPORTED_JOBS = {
     "collect-calendar", "collect-disclosures", "collect-kcif", "collect-kr-snapshot",
     "collect-market", "collect-news", "collect-us-close", "summarize-content",
+    "collect-stock-master", "build-issues",
 }
 RETRY_UNTIL_SUCCESS_JOBS = {"collect-kcif", "collect-us-close"}
 
@@ -33,6 +37,7 @@ class JobService:
         self.disclosures = DisclosureRepository(db)
         self.calendar = CalendarRepository(db)
         self.kcif = KcifRepository(db)
+        self.stock_master = StockMasterRepository(db)
 
     async def execute(
         self, *, job_name: str, idempotency_key: str, business_date: date, trigger_type: str,
@@ -56,6 +61,7 @@ class JobService:
             if job_name == "collect-news":
                 items = await NaverFinanceNewsCollector().collect()
                 inserted, skipped = self.news.upsert_many(items)
+                RuleBasedIssueService(self.runs.db).run()
                 errors: list[str] = []
             elif job_name == "collect-market":
                 items, errors = await kis_client.collect_market_snapshot()
@@ -66,6 +72,10 @@ class JobService:
             elif job_name == "collect-kr-snapshot":
                 items, errors = await kis_client.collect_kr_snapshot()
                 inserted, skipped = self.market.upsert_many(items)
+            elif job_name == "collect-stock-master":
+                items = await stock_master_collector.collect()
+                inserted, skipped = self.stock_master.replace(items)
+                errors = []
             elif job_name == "collect-disclosures":
                 items = await DartClient().collect(business_date)
                 inserted, skipped = self.disclosures.upsert_many(items)
@@ -77,6 +87,9 @@ class JobService:
                 item = await KcifCollector().collect(business_date)
                 inserted, skipped = self.kcif.upsert(item)
                 items, errors = [item], []
+            elif job_name == "build-issues":
+                inserted = RuleBasedIssueService(self.runs.db).run()
+                skipped, items, errors = 0, [None] * inserted, []
             else:
                 summarized = await AISummaryService(self.runs.db).run()
                 inserted, skipped, items, errors = summarized, 0, [None] * summarized, []

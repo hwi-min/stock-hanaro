@@ -10,12 +10,9 @@ export default async function IssuePage({ params }: { params: Promise<{ id: stri
   const issue = data.issues.find(item => item.id === id);
   if (!issue) notFound();
 
-  return <DetailPage eyebrow={issue.category} title={issue.title} description={issue.summary}>
-    <div className="grid detail-grid">
-      <Section title="확인된 핵심 사실"><p className="prose">대표 기사와 여러 출처에서 공통으로 확인되는 내용을 최대 3개로 정리합니다.</p></Section>
-      <Section title="국내시장 예상 영향"><p className="prose">관련 산업에 우호적 또는 부정적으로 작용할 가능성을 근거와 함께 표시합니다.</p></Section>
-      <Section title="반대 위험 요인"><p className="prose">예상과 다르게 전개될 조건을 함께 제시해 단정적인 해석을 피합니다.</p></Section>
-    </div>
+  const method = issue.summary_method === "extractive" ? "기사 기반 자동 발췌" : issue.summary_method === "ai" ? "AI 출처 기반 요약" : "대표 기사 발췌";
+  return <DetailPage eyebrow={issue.category} title={issue.title} description={`${method} · 관련 기사 ${issue.article_count}건`}>
+    <Section title={method}><p className="prose">{issue.summary}</p><p className="source-note">새로운 사실이나 시장 전망을 생성하지 않고, 아래 출처 기사에 포함된 문장만 선택했습니다.</p></Section>
     <Section title={`참고한 뉴스 ${issue.articles.length}건`}>
       <div className="source-articles">{issue.articles.map(article => <a href={article.url} target="_blank" rel="noreferrer" key={article.id}>
         <div><span>{article.publisher}</span>{article.is_representative && <em>대표 기사</em>}</div>

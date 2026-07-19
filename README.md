@@ -60,6 +60,7 @@ GitHub Actions가 배포된 Internal Job API를 호출해 다음 주기로 데�
 - 뉴스: 매일 한국시간 06:00~18:30, 30분 간격
 - DART 공시: 평일 한국시간 09:00~18:30, 30분 간격
 - 공식 경제 일정: 매일 한국시간 05:20
+- KRX 종목 마스터: 평일 한국시간 07:40에 KIS 공식 KOSPI·KOSDAQ 종목정보를 갱신
 - KCIF: 한국시간 06:00, 07:00, 07:30, 08:00, 08:30 순서로 실패 시에만 재시도
 - AI 요약: API Billing 활성화 전에는 수동 실행만 제공
 
@@ -71,10 +72,15 @@ GitHub 저장소의 `Settings → Secrets and variables → Actions`에 다음 �
 - `INTERNAL_JOB_SECRET`: FastAPI 환경변수와 동일한 내부 작업 비밀값
 
 각 워크플로는 `workflow_dispatch`로 수동 실행할 수 있습니다. `Summarize Content`는 OpenAI API 사용 한도가 준비된 후 수동 실행합니다.
+OpenAI API가 없는 동안 `collect-news`는 실제 기사만 사용한 규칙 기반 이슈 묶음과 추출 요약을 함께
+생성합니다. 분류·중복 제거·요약 기준은 [비-AI 뉴스 이슈 생성 정책](docs/rule-based-news-issues.md)을 따릅니다.
 
 국내 실시간 스트림은 항상 실행되는 백엔드 인스턴스에서 `KIS_REALTIME_ENABLED=true`로 활성화합니다.
-구독 종목은 `KIS_KR_SYMBOLS`에 쉼표로 구분해 설정합니다. 미국 지표와 미국시장 히트맵은
-실시간 스트림에 연결하지 않고 마지막 정규장 종가 스냅샷을 표시합니다.
+`KIS_KR_SYMBOLS`는 홈에서 항상 유지할 기본 종목이며, 상세 화면을 연 국내 종목은 자동 구독되고
+마지막 사용자가 화면을 닫으면 자동 해제됩니다. 동시 종목 한도는 지수 3개를 제외하고
+`KIS_MAX_REALTIME_STOCKS`(기본 37개)입니다. 구독 상태를 프로세스 메모리에서 관리하므로 실시간
+스트림을 담당하는 백엔드는 단일 worker로 실행합니다. 미국 지표와 미국시장 히트맵은 실시간
+스트림에 연결하지 않고 마지막 정규장 종가 스냅샷을 표시합니다.
 
 휴장 중에도 인증·연결·구독 승인은 다음 명령으로 확인할 수 있습니다. 체결 틱과 화면 갱신은 국내 장중에
 `GET /api/market/status`의 `last_tick_at`과 홈의 `실시간` 표시로 최종 확인합니다.

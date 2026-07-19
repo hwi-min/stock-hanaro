@@ -60,9 +60,12 @@ def test_integrated_search_finds_domestic_stock():
 def test_domestic_stock_detail_contract(monkeypatch):
     monkeypatch.setattr(kis_client, "domestic_price", AsyncMock(return_value={
         "price": Decimal("81000"), "change": Decimal("1000"), "change_pct": Decimal("1.25"),
-        "volume": Decimal("12345"), "name": "삼성전자", "as_of": datetime.now(timezone.utc),
+        "volume": Decimal("12345"), "market_cap": Decimal("5000000"),
+        "per": Decimal("18.2"), "pbr": Decimal("1.7"), "foreign_ownership_pct": Decimal("51.25"),
+        "high_52w": Decimal("90000"), "low_52w": Decimal("52000"),
+        "name": "삼성전자", "as_of": datetime.now(timezone.utc),
     }))
-    monkeypatch.setattr(kis_client, "domestic_daily_chart", AsyncMock(return_value=[{
+    monkeypatch.setattr(kis_client, "domestic_chart", AsyncMock(return_value=[{
         "time": "20260717", "open": Decimal("80000"), "high": Decimal("82000"),
         "low": Decimal("79500"), "close": Decimal("81000"), "volume": Decimal("12345"),
     }]))
@@ -72,4 +75,23 @@ def test_domestic_stock_detail_contract(monkeypatch):
     assert body["name"] == "삼성전자"
     assert body["price"] == 81000
     assert body["basis"] == "snapshot"
+    assert body["market_cap"] == 5000000
+    assert body["foreign_ownership_pct"] == 51.25
     assert body["chart"][0]["close"] == 81000
+
+
+def test_domestic_stock_weekly_chart_contract(monkeypatch):
+    monkeypatch.setattr(kis_client, "domestic_price", AsyncMock(return_value={
+        "price": Decimal("81000"), "change": Decimal("1000"), "change_pct": Decimal("1.25"),
+        "volume": Decimal("12345"), "name": "삼성전자", "as_of": datetime.now(timezone.utc),
+    }))
+    monkeypatch.setattr(kis_client, "domestic_chart", AsyncMock(return_value=[{
+        "time": "20260717", "open": Decimal("78000"), "high": Decimal("82000"),
+        "low": Decimal("77000"), "close": Decimal("81000"), "volume": Decimal("50000"),
+    }]))
+
+    response = client.get("/api/stocks/005930", params={"interval": "weekly"})
+
+    assert response.status_code == 200
+    assert response.json()["interval"] == "weekly"
+    kis_client.domestic_chart.assert_awaited_once_with("005930", "W")
