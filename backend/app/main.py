@@ -1,3 +1,6 @@
+import asyncio
+from contextlib import asynccontextmanager, suppress
+
 from sqlalchemy import text
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -5,10 +8,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.internal.jobs import router as jobs_router
 from app.api.public.dashboard import router as dashboard_router
 from app.api.public.meta import router as meta_router
+from app.api.public.market import router as market_router
+from app.api.public.stocks import router as stocks_router
 from app.core.config import settings
 from app.core.database import engine
+from app.realtime import market_stream
 
-app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    task = asyncio.create_task(market_stream.run()) if settings.kis_realtime_enabled else None
+    try:
+        yield
+    finally:
+        if task:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -35,4 +53,6 @@ def readiness():
 
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(meta_router, prefix="/api")
+app.include_router(market_router, prefix="/api")
+app.include_router(stocks_router, prefix="/api")
 app.include_router(jobs_router, prefix="/internal")

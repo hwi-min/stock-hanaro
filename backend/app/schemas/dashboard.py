@@ -26,6 +26,7 @@ class MarketMetric(BaseModel):
     change_pct: float
     as_of: datetime
     stale: bool = False
+    basis: Literal["close", "realtime", "delayed"]
 
 
 class HeatmapItem(BaseModel):
@@ -74,6 +75,7 @@ class DisclosureItem(BaseModel):
     title: str
     importance: Literal["high", "medium", "low"]
     filed_at: datetime
+    source_url: str
 
 
 class KcifSummary(BaseModel):

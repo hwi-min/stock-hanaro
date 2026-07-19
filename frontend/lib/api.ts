@@ -8,7 +8,9 @@ export async function getDashboard(): Promise<Dashboard> {
     const response = await fetch(`${API_BASE_URL}/api/dashboard/home`, { next: { revalidate: 60 } });
     if (!response.ok) throw new Error(`Dashboard API returned ${response.status}`);
     return response.json() as Promise<Dashboard>;
-  } catch {
-    return fallbackDashboard;
+  } catch (error) {
+    if (process.env.ALLOW_DASHBOARD_FALLBACK === "true") return fallbackDashboard;
+    const message = error instanceof Error ? error.message : "unknown dashboard error";
+    throw new Error(`실제 대시보드 데이터를 불러오지 못했습니다: ${message}`);
   }
 }

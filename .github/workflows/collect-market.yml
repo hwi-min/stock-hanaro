@@ -1,0 +1,71 @@
+name: Collect Market Snapshots
+
+on:
+  schedule:
+    # US regular-session close: 06:30 KST, retry at 07:00 only when the first run did not succeed.
+    - cron: "30 21 * * 1-5"
+    - cron: "0 22 * * 1-5"
+    # Korea fallback snapshots: 08:50 and 15:40 KST on trading weekdays.
+    - cron: "50 23 * * 0-4"
+    - cron: "40 6 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      job_name:
+        description: "Snapshot job"
+        required: true
+        default: collect-us-close
+        type: choice
+        options:
+          - collect-us-close
+          - collect-kr-snapshot
+          - collect-market
+      business_date:
+        description: "KST business date (YYYY-MM-DD); blank uses today"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collect-market-${{ github.event.schedule || inputs.job_name || 'manual' }}
+  cancel-in-progress: false
+
+jobs:
+  collect-us-close:
+    if: github.event_name == 'workflow_dispatch' && (inputs.job_name == 'collect-us-close' || inputs.job_name == 'collect-market') || github.event.schedule == '30 21 * * 1-5' || github.event.schedule == '0 22 * * 1-5'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Invoke market job
+        env:
+          BACKEND_API_BASE_URL: ${{ secrets.BACKEND_API_BASE_URL }}
+          INTERNAL_JOB_SECRET: ${{ secrets.INTERNAL_JOB_SECRET }}
+          JOB_NAME: ${{ inputs.job_name || 'collect-us-close' }}
+          BUSINESS_DATE: ${{ inputs.business_date }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: python scripts/invoke_job.py
+
+  collect-kr-snapshot:
+    if: github.event_name == 'workflow_dispatch' && inputs.job_name == 'collect-kr-snapshot' || github.event.schedule == '50 23 * * 0-4' || github.event.schedule == '40 6 * * 1-5'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Invoke Korea snapshot job
+        env:
+          BACKEND_API_BASE_URL: ${{ secrets.BACKEND_API_BASE_URL }}
+          INTERNAL_JOB_SECRET: ${{ secrets.INTERNAL_JOB_SECRET }}
+          JOB_NAME: collect-kr-snapshot
+          BUSINESS_DATE: ${{ inputs.business_date }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: python scripts/invoke_job.py

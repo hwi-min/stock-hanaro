@@ -2,6 +2,8 @@ import { DetailPage } from "@/components/DetailPage";
 import { Section } from "@/components/Section";
 import { getDashboard } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+
 const sourceLabels = { bls: "미국 노동통계국", bea: "미국 경제분석국", federal_reserve: "미 연방준비제도", bok: "한국은행" };
 const importanceLabels = { high: "중요", medium: "보통", low: "낮음" };
 

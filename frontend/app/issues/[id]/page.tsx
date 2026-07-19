@@ -3,6 +3,8 @@ import { DetailPage } from "@/components/DetailPage";
 import { Section } from "@/components/Section";
 import { getDashboard } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+
 export default async function IssuePage({ params }: { params: Promise<{ id: string }> }) {
   const [{ id }, data] = await Promise.all([params, getDashboard()]);
   const issue = data.issues.find(item => item.id === id);

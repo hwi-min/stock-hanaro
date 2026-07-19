@@ -1,90 +1,167 @@
-from datetime import datetime, timezone
+import re
+from datetime import datetime, time, timedelta, timezone
+from decimal import Decimal
+
+from sqlalchemy import desc, func, select
+from sqlalchemy.orm import Session
+
+from app.models.disclosure import Disclosure
+from app.models.economic_event import EconomicEvent
+from app.models.kcif_report import KcifReport
+from app.models.market_quote import MarketQuote
+from app.models.news_article import NewsArticle
+from app.models.issue_summary import IssueSummary
+
+
+METRIC_ORDER = ("SPX", "DOW30", "NASDAQ", "RUSSELL2000", "VIX", "GOLD", "KOSPI", "KOSDAQ", "KOSPI200", "USDKRW", "KTB3Y")
+METRIC_LABELS = {
+    "SPX": "S&P 500", "DOW30": "Dow 30", "NASDAQ": "NASDAQ", "RUSSELL2000": "Russell 2000",
+    "VIX": "VIX", "GOLD": "Gold", "KOSPI": "KOSPI", "KOSDAQ": "KOSDAQ", "KOSPI200": "KOSPI 200",
+    "USDKRW": "USD/KRW", "KTB3Y": "국고채 3년",
+}
+
+
+def aware(value: datetime | None) -> datetime | None:
+    if value is None or value.tzinfo is not None:
+        return value
+    return value.replace(tzinfo=timezone.utc)
+
+
+def number(value: Decimal | None) -> float:
+    return float(value or 0)
 
 
 class DashboardRepository:
-    """M1 fixture repository. M2 replaces each collection with persisted source data."""
+    def __init__(self, db: Session):
+        self.db = db
 
-    def get_snapshot(self) -> dict:
-        now = datetime.now(timezone.utc)
-        return {
-            "briefing": {
-                "stance": "risk_on",
-                "headline": "기술주 강세가 이어졌지만 금리와 환율을 함께 확인하세요",
-                "summary": "미국 기술주 상승이 국내 반도체 투자심리에 우호적일 가능성이 있습니다. 다만 미국 국채금리와 원·달러 환율의 방향이 장중 변동성을 키울 수 있습니다.",
-                "keywords": ["미국 기술주", "반도체", "원·달러 환율"],
-                "source_ids": ["market:nasdaq", "issue:semiconductor"],
-                "as_of": now,
-            },
-            "metrics": [
-                {"symbol": "SPX", "label": "S&P 500", "market": "us", "value": "5,321.41", "change_pct": 0.78, "as_of": now},
-                {"symbol": "DJI", "label": "Dow 30", "market": "us", "value": "39,872.99", "change_pct": 0.32, "as_of": now},
-                {"symbol": "IXIC", "label": "NASDAQ", "market": "us", "value": "16,832.62", "change_pct": 1.24, "as_of": now},
-                {"symbol": "RUT", "label": "Russell 2000", "market": "us", "value": "2,103.77", "change_pct": -0.18, "as_of": now},
-                {"symbol": "VIX", "label": "VIX", "market": "us", "value": "13.82", "change_pct": -2.12, "as_of": now},
-                {"symbol": "GOLD", "label": "Gold", "market": "us", "value": "2,332.10", "change_pct": 0.41, "as_of": now},
-                {"symbol": "KOSPI", "label": "KOSPI", "market": "kr", "value": "2,678.35", "change_pct": 0.45, "as_of": now},
-                {"symbol": "KOSDAQ", "label": "KOSDAQ", "market": "kr", "value": "865.43", "change_pct": 0.72, "as_of": now},
-                {"symbol": "KOSPI200", "label": "KOSPI 200", "market": "kr", "value": "365.82", "change_pct": 0.49, "as_of": now},
-                {"symbol": "USDKRW", "label": "USD/KRW", "market": "kr", "value": "1,356.40", "change_pct": -0.32, "as_of": now},
-                {"symbol": "KR3Y", "label": "국고채 3년", "market": "kr", "value": "3.21%", "change_pct": -0.04, "as_of": now},
-            ],
-            "heatmap": [
-                {"symbol": "NVDA", "name": "NVIDIA", "sector": "기술", "industry": "반도체", "price": 171.38, "change_pct": -2.21, "market_cap_weight": 24},
-                {"symbol": "AAPL", "name": "Apple", "sector": "기술", "industry": "소비자 전자제품", "price": 210.02, "change_pct": 0.14, "market_cap_weight": 23},
-                {"symbol": "MSFT", "name": "Microsoft", "sector": "기술", "industry": "소프트웨어", "price": 510.05, "change_pct": -1.81, "market_cap_weight": 22},
-                {"symbol": "AVGO", "name": "Broadcom", "sector": "기술", "industry": "반도체", "price": 274.31, "change_pct": -0.97, "market_cap_weight": 15},
-                {"symbol": "AMD", "name": "AMD", "sector": "기술", "industry": "반도체", "price": 155.61, "change_pct": -1.03, "market_cap_weight": 10},
-                {"symbol": "ORCL", "name": "Oracle", "sector": "기술", "industry": "소프트웨어", "price": 244.17, "change_pct": 1.77, "market_cap_weight": 9},
-                {"symbol": "GOOGL", "name": "Alphabet", "sector": "커뮤니케이션", "industry": "인터넷 콘텐츠", "price": 184.92, "change_pct": -2.17, "market_cap_weight": 22},
-                {"symbol": "META", "name": "Meta Platforms", "sector": "커뮤니케이션", "industry": "인터넷 콘텐츠", "price": 702.18, "change_pct": -2.79, "market_cap_weight": 14},
-                {"symbol": "NFLX", "name": "Netflix", "sector": "커뮤니케이션", "industry": "엔터테인먼트", "price": 1189.32, "change_pct": -1.26, "market_cap_weight": 8},
-                {"symbol": "AMZN", "name": "Amazon", "sector": "경기소비재", "industry": "인터넷 소매", "price": 223.88, "change_pct": -1.06, "market_cap_weight": 18},
-                {"symbol": "TSLA", "name": "Tesla", "sector": "경기소비재", "industry": "자동차", "price": 319.41, "change_pct": -2.61, "market_cap_weight": 12},
-                {"symbol": "HD", "name": "Home Depot", "sector": "경기소비재", "industry": "주택개선 소매", "price": 338.87, "change_pct": -2.63, "market_cap_weight": 8},
-                {"symbol": "JPM", "name": "JPMorgan Chase", "sector": "금융", "industry": "종합은행", "price": 289.91, "change_pct": -0.60, "market_cap_weight": 12},
-                {"symbol": "BRK-B", "name": "Berkshire Hathaway", "sector": "금융", "industry": "보험", "price": 472.61, "change_pct": -0.45, "market_cap_weight": 13},
-                {"symbol": "V", "name": "Visa", "sector": "금융", "industry": "결제서비스", "price": 349.27, "change_pct": -1.80, "market_cap_weight": 10},
-                {"symbol": "LLY", "name": "Eli Lilly", "sector": "헬스케어", "industry": "제약", "price": 779.27, "change_pct": 0.85, "market_cap_weight": 12},
-                {"symbol": "JNJ", "name": "Johnson & Johnson", "sector": "헬스케어", "industry": "제약", "price": 166.41, "change_pct": 1.23, "market_cap_weight": 9},
-                {"symbol": "WMT", "name": "Walmart", "sector": "필수소비재", "industry": "할인점", "price": 95.38, "change_pct": -0.62, "market_cap_weight": 11},
-                {"symbol": "KO", "name": "Coca-Cola", "sector": "필수소비재", "industry": "음료", "price": 69.71, "change_pct": -3.96, "market_cap_weight": 8},
-                {"symbol": "XOM", "name": "Exxon Mobil", "sector": "에너지", "industry": "통합 석유·가스", "price": 113.27, "change_pct": 0.97, "market_cap_weight": 11},
-                {"symbol": "GE", "name": "GE Aerospace", "sector": "산업재", "industry": "항공우주", "price": 258.21, "change_pct": 0.90, "market_cap_weight": 9},
-            ],
-            "schedules": [
-                {"id": "bls-cpi", "source": "bls", "country": "US", "category": "물가", "title": "미국 소비자물가지수(CPI)", "scheduled_at": now.replace(hour=12, minute=30), "importance": "high", "source_url": "https://www.bls.gov/schedule/news_release/cpi.htm"},
-                {"id": "fed-speech", "source": "federal_reserve", "country": "US", "category": "통화정책", "title": "연준 위원 연설", "scheduled_at": now.replace(hour=14, minute=0), "importance": "high", "source_url": "https://www.federalreserve.gov/newsevents/calendar.htm"},
-                {"id": "bok-ppi", "source": "bok", "country": "KR", "category": "물가", "title": "한국 생산자물가지수", "scheduled_at": now.replace(hour=21, minute=0), "importance": "medium", "source_url": "https://www.bok.or.kr/portal/submain/submain/sts.do?menuNo=200094&viewType=SUBMAIN"},
-            ],
-            "issues": [
-                {"id": "cpi", "title": "미국 물가 둔화 기대", "summary": "인플레이션 둔화 흐름이 금리 인하 기대를 지지하고 있습니다.", "sentiment": "positive", "article_count": 24, "category": "거시·금리", "articles": [
-                    {"id": "cpi-1", "title": "미국 소비자물가 둔화, 금리 경로에 관심", "publisher": "연합뉴스", "published_at": now, "url": "https://finance.naver.com/news/", "is_representative": True},
-                    {"id": "cpi-2", "title": "인플레이션 압력 완화에 미국 증시 상승", "publisher": "한국경제", "published_at": now, "url": "https://finance.naver.com/news/"},
-                    {"id": "cpi-3", "title": "시장 예상과 부합한 CPI, 연준 판단은", "publisher": "매일경제", "published_at": now, "url": "https://finance.naver.com/news/"},
-                ]},
-                {"id": "hbm", "title": "HBM 수요 기대", "summary": "AI 가속기 수요가 국내 반도체 공급망에 우호적으로 작용할 가능성이 있습니다.", "sentiment": "positive", "article_count": 18, "category": "반도체", "articles": [
-                    {"id": "hbm-1", "title": "AI 서버 투자 확대에 HBM 수요 지속", "publisher": "전자신문", "published_at": now, "url": "https://finance.naver.com/news/", "is_representative": True},
-                    {"id": "hbm-2", "title": "국내 반도체 공급망, 차세대 HBM 대응", "publisher": "서울경제", "published_at": now, "url": "https://finance.naver.com/news/"},
-                    {"id": "hbm-3", "title": "글로벌 AI 투자와 메모리 업황 전망", "publisher": "이데일리", "published_at": now, "url": "https://finance.naver.com/news/"},
-                ]},
-                {"id": "oil", "title": "국제유가 상승", "summary": "공급 불확실성으로 유가가 상승하며 운송·화학 업종 비용 부담이 커질 수 있습니다.", "sentiment": "negative", "article_count": 15, "category": "에너지", "articles": [
-                    {"id": "oil-1", "title": "공급 우려에 국제유가 상승세", "publisher": "아시아경제", "published_at": now, "url": "https://finance.naver.com/news/", "is_representative": True},
-                    {"id": "oil-2", "title": "유가 상승이 운송·화학 업종에 미칠 영향", "publisher": "머니투데이", "published_at": now, "url": "https://finance.naver.com/news/"},
-                    {"id": "oil-3", "title": "지정학적 긴장과 원유 공급 전망", "publisher": "뉴스1", "published_at": now, "url": "https://finance.naver.com/news/"},
-                ]},
-            ],
-            "disclosures": [
-                {"id": "dart-1", "company": "삼성전자", "title": "기업설명회 개최", "importance": "medium", "filed_at": now},
-                {"id": "dart-2", "company": "SK하이닉스", "title": "신규 시설투자", "importance": "high", "filed_at": now},
-            ],
-            "kcif": [
-                {"id": "kcif-rates", "title": "미국 국채금리 방향 전환", "summary": "장기 금리 하락은 성장주 가치평가 부담을 일부 낮출 수 있습니다.", "topic": "금리", "source_url": "https://www.kcif.or.kr/annual/newsflashList", "as_of": now},
-                {"id": "kcif-oil", "title": "WTI 가격 상승", "summary": "지정학적 불확실성과 공급 우려가 유가에 반영되고 있습니다.", "topic": "원자재", "source_url": "https://www.kcif.or.kr/annual/newsflashList", "as_of": now},
-            ],
-            "freshness": [
-                {"dataset": "market", "label": "시장 데이터", "as_of": now, "stale": False},
-                {"dataset": "news", "label": "뉴스·이슈", "as_of": now, "stale": False},
-                {"dataset": "disclosure", "label": "공시", "as_of": now, "stale": False},
-                {"dataset": "kcif", "label": "KCIF", "as_of": now, "stale": False},
-            ],
-        }
+    def market_metrics(self) -> list[dict]:
+        rows = self.db.scalars(select(MarketQuote).where(MarketQuote.symbol.in_(METRIC_ORDER))).all()
+        by_symbol = {row.symbol: row for row in rows}
+        result = []
+        for symbol in METRIC_ORDER:
+            row = by_symbol.get(symbol)
+            if row is None or row.price <= 0:
+                continue
+            value = f"{number(row.price):,.3f}" if symbol == "KTB3Y" else f"{number(row.price):,.2f}"
+            if symbol == "KTB3Y":
+                value += "%"
+            result.append({
+                "symbol": symbol, "label": METRIC_LABELS[symbol],
+                "market": "us" if row.market in {"us", "global"} else "kr", "value": value,
+                "change_pct": number(row.change_pct), "as_of": aware(row.as_of),
+                "stale": datetime.now(timezone.utc) - aware(row.collected_at) > timedelta(minutes=30),
+                "basis": "close" if row.market in {"us", "global"} else "delayed",
+            })
+        return result
+
+    def heatmap(self) -> list[dict]:
+        rows = self.db.scalars(select(MarketQuote).where(
+            MarketQuote.market == "us", MarketQuote.asset_type == "equity",
+        ).order_by(desc(MarketQuote.market_cap))).all()
+        caps = [number(row.market_cap) for row in rows if number(row.market_cap) > 0]
+        max_cap = max(caps, default=1)
+        return [{
+            "symbol": row.symbol, "name": row.name or row.symbol, "sector": row.sector or "기타",
+            "industry": row.industry or "기타", "price": number(row.price), "change_pct": number(row.change_pct),
+            "market_cap_weight": max(1.0, number(row.market_cap) / max_cap * 24) if row.market_cap else 1.0,
+        } for row in rows]
+
+    def schedules(self, now: datetime) -> list[dict]:
+        end = now + timedelta(days=2)
+        rows = self.db.scalars(select(EconomicEvent).where(
+            EconomicEvent.scheduled_at_utc >= now, EconomicEvent.scheduled_at_utc < end,
+        ).order_by(EconomicEvent.scheduled_at_utc).limit(8)).all()
+        return [{
+            "id": f"{row.source}:{row.source_event_id}", "source": row.source, "country": row.country,
+            "category": row.category, "title": row.title, "scheduled_at": aware(row.scheduled_at_kst),
+            "importance": row.importance, "source_url": row.source_url,
+        } for row in rows]
+
+    @staticmethod
+    def _news_category(title: str) -> str:
+        compact = title.lower()
+        for keywords, category in ((('반도체', 'hbm', 'ai'), '반도체'), (('금리', '연준', 'fed'), '거시·금리'),
+                                   (('유가', '원유', 'oil'), '에너지'), (('환율', '달러'), '환율'),
+                                   (('중국',), '중국'), (('코스피', '증시'), '증시')):
+            if any(keyword in compact for keyword in keywords):
+                return category
+        return "주요 뉴스"
+
+    def issues(self) -> list[dict]:
+        rows = self.db.scalars(select(NewsArticle).order_by(
+            desc(NewsArticle.published_at), desc(NewsArticle.collected_at),
+        ).limit(30)).all()
+        groups: dict[str, list[NewsArticle]] = {}
+        for row in rows:
+            groups.setdefault(self._news_category(row.title), []).append(row)
+        slugs = {"반도체": "semiconductor", "거시·금리": "macro-rates", "에너지": "energy",
+                 "환율": "fx", "중국": "china", "증시": "market", "주요 뉴스": "news"}
+        result = []
+        generated_by_key = {row.issue_key: row for row in self.db.scalars(select(IssueSummary)).all()}
+        for category, articles in list(groups.items())[:6]:
+            representative = articles[0]
+            issue_key = slugs[category]
+            generated = generated_by_key.get(issue_key)
+            result.append({
+                "id": issue_key, "title": generated.title if generated else representative.title,
+                "summary": generated.summary if generated else representative.summary or representative.title,
+                "sentiment": generated.sentiment if generated else "neutral",
+                "article_count": len(articles), "category": category,
+                "articles": [{
+                    "id": str(row.id), "title": row.title, "publisher": row.publisher or row.source,
+                    "published_at": aware(row.published_at or row.collected_at), "url": row.canonical_url,
+                    "is_representative": index == 0,
+                } for index, row in enumerate(articles[:8])],
+            })
+        return result
+
+    def disclosures(self) -> list[dict]:
+        latest_date = self.db.scalar(select(func.max(Disclosure.receipt_date)))
+        if latest_date is None:
+            return []
+        rows = self.db.scalars(select(Disclosure).where(
+            Disclosure.receipt_date == latest_date, Disclosure.importance.in_(("high", "medium")),
+        ).order_by(
+            desc(Disclosure.importance), desc(Disclosure.receipt_no),
+        ).limit(10)).all()
+        return [{
+            "id": row.receipt_no, "company": row.corp_name, "title": row.title.strip(),
+            "importance": row.importance,
+            "filed_at": datetime.combine(row.receipt_date, time.min, tzinfo=timezone.utc),
+            "source_url": row.source_url,
+        } for row in rows]
+
+    @staticmethod
+    def _kcif_topic(title: str) -> str:
+        for keyword, topic in (("금리", "금리"), ("환율", "환율"), ("유가", "원자재"), ("중국", "중국"), ("미국", "미국")):
+            if keyword in title:
+                return topic
+        return "국제금융"
+
+    def kcif(self) -> list[dict]:
+        rows = self.db.scalars(select(KcifReport).order_by(desc(KcifReport.report_date)).limit(3)).all()
+        result = []
+        for row in rows:
+            summary = re.sub(r"\s+", " ", row.extracted_text).strip()
+            result.append({
+                "id": row.report_no, "title": row.title, "summary": row.ai_summary or summary[:240],
+                "topic": row.ai_topic or self._kcif_topic(row.title), "source_url": row.source_url,
+                "as_of": aware(row.ai_summarized_at or row.collected_at),
+            })
+        return result
+
+    def freshness(self, now: datetime) -> list[dict]:
+        specs = (
+            ("market", "시장 데이터", MarketQuote.collected_at, timedelta(minutes=30)),
+            ("news", "뉴스·이슈", NewsArticle.collected_at, timedelta(hours=6)),
+            ("disclosure", "공시", Disclosure.collected_at, timedelta(hours=36)),
+            ("calendar", "주요 일정", EconomicEvent.collected_at, timedelta(hours=36)),
+            ("kcif", "KCIF", KcifReport.collected_at, timedelta(hours=36)),
+        )
+        result = []
+        for dataset, label, column, threshold in specs:
+            as_of = aware(self.db.scalar(select(func.max(column))))
+            if as_of is not None:
+                result.append({"dataset": dataset, "label": label, "as_of": as_of, "stale": now - as_of > threshold})
+        return result

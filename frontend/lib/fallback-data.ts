@@ -18,7 +18,7 @@ export const fallbackDashboard: Dashboard = {
     ["KOSPI", "KOSPI", "kr", "2,678.35", 0.45], ["KOSDAQ", "KOSDAQ", "kr", "865.43", 0.72],
     ["KOSPI200", "KOSPI 200", "kr", "365.82", 0.49], ["USDKRW", "USD/KRW", "kr", "1,356.40", -0.32],
     ["KR3Y", "국고채 3년", "kr", "3.21%", -0.04],
-  ].map(([symbol, label, market, value, change_pct]) => ({ symbol: String(symbol), label: String(label), market: market as "us" | "kr", value: String(value), change_pct: Number(change_pct), as_of: asOf, stale: false })),
+  ].map(([symbol, label, market, value, change_pct]) => ({ symbol: String(symbol), label: String(label), market: market as "us" | "kr", value: String(value), change_pct: Number(change_pct), as_of: asOf, stale: false, basis: market === "us" ? "close" as const : "delayed" as const })),
   heatmap: [
     ["NVDA","NVIDIA","기술","반도체",171.38,-2.21,24], ["AAPL","Apple","기술","소비자 전자제품",210.02,0.14,23],
     ["MSFT","Microsoft","기술","소프트웨어",510.05,-1.81,22], ["AVGO","Broadcom","기술","반도체",274.31,-0.97,15],
@@ -55,8 +55,8 @@ export const fallbackDashboard: Dashboard = {
     ] },
   ],
   disclosures: [
-    { id: "dart-1", company: "삼성전자", title: "기업설명회 개최", importance: "medium", filed_at: asOf },
-    { id: "dart-2", company: "SK하이닉스", title: "신규 시설투자", importance: "high", filed_at: asOf },
+    { id: "dart-1", company: "삼성전자", title: "기업설명회 개최", importance: "medium", filed_at: asOf, source_url: "https://dart.fss.or.kr/" },
+    { id: "dart-2", company: "SK하이닉스", title: "신규 시설투자", importance: "high", filed_at: asOf, source_url: "https://dart.fss.or.kr/" },
   ],
   kcif: [
     { id: "kcif-rates", title: "미국 국채금리 방향 전환", summary: "장기 금리 하락은 성장주 가치평가 부담을 일부 낮출 수 있습니다.", topic: "금리", source_url: "https://www.kcif.or.kr/annual/newsflashList", as_of: asOf },
