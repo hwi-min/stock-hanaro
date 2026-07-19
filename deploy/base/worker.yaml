@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock-hanaro-kis-worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: stock-hanaro-kis-worker
+  template:
+    metadata:
+      labels:
+        app: stock-hanaro-kis-worker
+    spec:
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: worker
+          image: stock-hanaro-backend
+          command: ["python", "-m", "app.workers.kis_realtime"]
+          envFrom:
+            - configMapRef: {name: stock-hanaro-config}
+            - secretRef: {name: stock-hanaro-app-secret}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 25m, memory: 96Mi}
+            limits: {cpu: 300m, memory: 384Mi}

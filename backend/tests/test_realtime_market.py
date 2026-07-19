@@ -84,3 +84,18 @@ def test_late_subscribe_ack_does_not_restore_released_symbol():
     asyncio.run(stream.handle(ack, websocket))
 
     assert ("H0STCNT0", "035420") not in stream.accepted_subscriptions
+
+
+def test_tick_is_forwarded_to_worker_sink():
+    received: list[dict] = []
+
+    async def sink(event: dict) -> None:
+        received.append(event)
+
+    stream = MarketStream(event_sink=sink)
+    websocket = FakeWebSocket()
+
+    asyncio.run(stream.handle("0|H0STCNT0|1|005930^091500^81200^2^900^1.12", websocket))
+
+    assert received[0]["symbol"] == "005930"
+    assert received[0]["provider"] == "kis_ws"

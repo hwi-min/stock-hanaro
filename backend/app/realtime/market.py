@@ -19,7 +19,8 @@ def as_number(value: str) -> float:
 
 
 class MarketStream:
-    def __init__(self):
+    def __init__(self, event_sink=None):
+        self.event_sink = event_sink
         self.latest: dict[str, dict] = {}
         self.subscribers: set[asyncio.Queue] = set()
         self.connected = False
@@ -112,6 +113,8 @@ class MarketStream:
 
     async def publish(self, event: dict) -> None:
         self.latest[event["symbol"]] = event
+        if self.event_sink:
+            await self.event_sink(event)
         for queue in tuple(self.subscribers):
             if queue.full():
                 try:
@@ -223,6 +226,3 @@ class MarketStream:
                     yield {"type": "heartbeat", "connected": self.connected}
         finally:
             self.subscribers.discard(queue)
-
-
-market_stream = MarketStream()

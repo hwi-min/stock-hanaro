@@ -1,0 +1,230 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-calendar}
+spec:
+  schedule: "20 5 * * *"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-calendar"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-news}
+spec:
+  schedule: "*/30 6-18 * * *"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-news"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-disclosures}
+spec:
+  schedule: "*/30 9-18 * * 1-5"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-disclosures"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-stock-master}
+spec:
+  schedule: "40 7 * * 1-5"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-stock-master"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-us-close}
+spec:
+  schedule: "30 6 * * 2-6"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-us-close"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: retry-us-close}
+spec:
+  schedule: "0 7 * * 2-6"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-us-close", "--slot", "retry-0700"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-kr-open-snapshot}
+spec:
+  schedule: "50 8 * * 1-5"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-kr-snapshot"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-kr-close-snapshot}
+spec:
+  schedule: "40 15 * * 1-5"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-kr-snapshot"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: collect-kcif}
+spec:
+  schedule: "0 6 * * 1-5"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-kcif"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: retry-kcif}
+spec:
+  schedule: "0,30 7-8 * * 1-5"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "collect-kcif"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: summarize-content}
+spec:
+  schedule: "40 8 * * 1-5"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: ghcr-pull-secret}]
+          containers:
+            - name: job
+              image: stock-hanaro-backend
+              command: ["python", "-m", "app.workers.run_job", "summarize-content"]
+              envFrom:
+                - configMapRef: {name: stock-hanaro-config}
+                - secretRef: {name: stock-hanaro-app-secret}

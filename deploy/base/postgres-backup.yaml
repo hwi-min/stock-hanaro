@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stock-hanaro-postgres-backup
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-postgres
+spec:
+  schedule: "10 3 * * *"
+  timeZone: Asia/Seoul
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 70
+          containers:
+            - name: pg-dump
+              image: postgres:16-alpine
+              command: ["/bin/sh", "-c"]
+              args:
+                - >-
+                  find /backup -type f -name '*.sql.gz' -mtime +14 -delete &&
+                  pg_dump --clean --if-exists --no-owner --no-privileges |
+                  gzip > "/backup/stock-hanaro-$(date +%Y%m%d-%H%M%S).sql.gz"
+              envFrom:
+                - secretRef: {name: stock-hanaro-postgres-secret}
+              env:
+                - {name: PGHOST, value: stock-hanaro-postgres}
+                - {name: PGPORT, value: "5432"}
+                - {name: PGUSER, valueFrom: {secretKeyRef: {name: stock-hanaro-postgres-secret, key: POSTGRES_USER}}}
+                - {name: PGDATABASE, valueFrom: {secretKeyRef: {name: stock-hanaro-postgres-secret, key: POSTGRES_DB}}}
+                - {name: PGPASSWORD, valueFrom: {secretKeyRef: {name: stock-hanaro-postgres-secret, key: POSTGRES_PASSWORD}}}
+              resources:
+                requests: {cpu: 25m, memory: 64Mi}
+                limits: {cpu: 300m, memory: 256Mi}
+              volumeMounts:
+                - {name: backup, mountPath: /backup}
+          volumes:
+            - name: backup
+              persistentVolumeClaim: {claimName: stock-hanaro-postgres-backup}

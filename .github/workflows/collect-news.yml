@@ -1,9 +1,6 @@
 name: Collect News
 
 on:
-  schedule:
-    # KST 06:00-18:30
-    - cron: "*/30 21-23,0-9 * * *"
   workflow_dispatch:
 
 permissions:

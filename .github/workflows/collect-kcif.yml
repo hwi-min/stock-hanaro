@@ -1,13 +1,6 @@
 name: Collect KCIF
 
 on:
-  schedule:
-    # UTC: 21:00, 22:00, 22:30, 23:00, 23:30 = KST: 06:00, 07:00, 07:30, 08:00, 08:30
-    - cron: "0 21 * * 0-4"
-    - cron: "0 22 * * 0-4"
-    - cron: "30 22 * * 0-4"
-    - cron: "0 23 * * 0-4"
-    - cron: "30 23 * * 0-4"
   workflow_dispatch:
     inputs:
       business_date:

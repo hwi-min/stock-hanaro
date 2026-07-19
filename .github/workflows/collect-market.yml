@@ -1,13 +1,6 @@
 name: Collect Market Snapshots
 
 on:
-  schedule:
-    # US regular-session close: 06:30 KST, retry at 07:00 only when the first run did not succeed.
-    - cron: "30 21 * * 1-5"
-    - cron: "0 22 * * 1-5"
-    # Korea fallback snapshots: 08:50 and 15:40 KST on trading weekdays.
-    - cron: "50 23 * * 0-4"
-    - cron: "40 6 * * 1-5"
   workflow_dispatch:
     inputs:
       job_name:

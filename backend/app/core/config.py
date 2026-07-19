@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     kis_realtime_enabled: bool = False
     kis_kr_symbols: str = "005930,000660,005380,373220"
     kis_max_realtime_stocks: int = 37
+    realtime_tick_max_age_seconds: int = 120
     bok_ecos_api_key: str = ""
     openai_api_key: str = ""
     openai_model: str = "gpt-5.6-luna"
