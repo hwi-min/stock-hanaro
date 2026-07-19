@@ -3,6 +3,8 @@ import { MarketHeatmap } from "@/components/MarketHeatmap";
 import { Section } from "@/components/Section";
 import { getDashboard } from "@/lib/api";
 
+export const dynamic = "force-dynamic";
+
 export default async function MarketsPage() {
   const data = await getDashboard();
   return <DetailPage eyebrow="US MARKET HEATMAP" title="미국시장 히트맵" description="시가총액 비중과 등락률로 미국 주요 종목의 흐름을 확인합니다. 종목에 마우스를 올리면 핵심 정보가 표시되고, 클릭하면 종목 상세 화면으로 이동합니다.">

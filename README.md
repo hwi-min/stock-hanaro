@@ -47,9 +47,58 @@ npm run dev
 
 주요 경제 일정 상세 화면은 `/calendar`에서 확인합니다. M1에서는 공식 일정과 동일한 계약의 fixture를 사용하며, M2에서 BLS·BEA·Federal Reserve·한국은행 collector를 Job API에 연결합니다.
 
-백엔드가 꺼져 있으면 홈은 M1 fallback fixture로 렌더링됩니다. 운영에서는 `NEXT_PUBLIC_API_BASE_URL`을 배포된 API 주소로 설정합니다.
+운영에서는 `NEXT_PUBLIC_API_BASE_URL`을 배포된 API 주소로 설정합니다. 백엔드 요청 실패를 샘플 데이터로
+숨기지 않으며 오류 화면을 표시합니다. 화면 개발용 fixture가 꼭 필요한 경우에만
+`ALLOW_DASHBOARD_FALLBACK=true`를 명시적으로 설정합니다.
+
+## M2 자동 수집 설정
+
+GitHub Actions가 배포된 Internal Job API를 호출해 다음 주기로 데이터를 갱신합니다.
+
+- 미국 시장: 미국 정규장 마감 후 한국시간 06:30에 종가 확정, 실패한 경우에만 07:00 재시도
+- 국내 시장: KIS WebSocket으로 국내 지수·설정 종목을 장중 실시간 제공, 08:50·15:40 스냅샷을 연결 장애 시 안전망으로 저장
+- 뉴스: 매일 한국시간 06:00~18:30, 30분 간격
+- DART 공시: 평일 한국시간 09:00~18:30, 30분 간격
+- 공식 경제 일정: 매일 한국시간 05:20
+- KRX 종목 마스터: 평일 한국시간 07:40에 KIS 공식 KOSPI·KOSDAQ 종목정보를 갱신
+- KCIF: 평일 한국시간 06:00, 07:00, 07:30, 08:00, 08:30 순서로 실패 시에만 재시도
+- AI 요약: API Billing 활성화 전에는 수동 실행만 제공
+
+모든 워크플로는 Job API의 응답 상태가 `succeeded` 또는 `skipped`가 아니면 실패합니다. GitHub Actions의 성공 표시가 실제 파이프라인 실패를 가리지 않습니다.
+
+GitHub 저장소의 `Settings → Secrets and variables → Actions`에 다음 값을 등록합니다.
+
+- `BACKEND_API_BASE_URL`: 배포된 FastAPI 주소
+- `INTERNAL_JOB_SECRET`: FastAPI 환경변수와 동일한 내부 작업 비밀값
+
+각 워크플로는 `workflow_dispatch`로 수동 실행할 수 있습니다. `Summarize Content`는 OpenAI API 사용 한도가 준비된 후 수동 실행합니다.
+OpenAI API가 없는 동안 `collect-news`는 실제 기사만 사용한 규칙 기반 이슈 묶음과 추출 요약을 함께
+생성합니다. 분류·중복 제거·요약 기준은 [비-AI 뉴스 이슈 생성 정책](docs/rule-based-news-issues.md)을 따릅니다.
+
+국내 실시간 스트림은 항상 실행되는 백엔드 인스턴스에서 `KIS_REALTIME_ENABLED=true`로 활성화합니다.
+`KIS_KR_SYMBOLS`는 홈에서 항상 유지할 기본 종목이며, 상세 화면을 연 국내 종목은 자동 구독되고
+마지막 사용자가 화면을 닫으면 자동 해제됩니다. 동시 종목 한도는 지수 3개를 제외하고
+`KIS_MAX_REALTIME_STOCKS`(기본 37개)입니다. 구독 상태를 프로세스 메모리에서 관리하므로 실시간
+스트림을 담당하는 백엔드는 단일 worker로 실행합니다. 미국 지표와 미국시장 히트맵은 실시간
+스트림에 연결하지 않고 마지막 정규장 종가 스냅샷을 표시합니다.
+
+휴장 중에도 인증·연결·구독 승인은 다음 명령으로 확인할 수 있습니다. 체결 틱과 화면 갱신은 국내 장중에
+`GET /api/market/status`의 `last_tick_at`과 홈의 `실시간` 표시로 최종 확인합니다.
+
+```bash
+backend/.venv/bin/python scripts/verify_kis_realtime.py --timeout 15
+```
 
 ## 검증
+
+M2 API·DB·수집 파이프라인을 읽기 전용으로 통합 점검합니다.
+
+```bash
+python3 scripts/check_m2_integration.py
+```
+
+AI를 제외한 수집 Job을 실제 실행한 뒤 점검하려면 `--run-jobs`를 사용합니다. 이 명령은 데이터를
+변경합니다. 옵션과 판정 기준은 [M2 통합 점검 가이드](docs/m2-integration-check.md)를 참고하세요.
 
 ```bash
 python3 scripts/validate_data_sources.py

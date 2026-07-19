@@ -18,7 +18,7 @@ export const fallbackDashboard: Dashboard = {
     ["KOSPI", "KOSPI", "kr", "2,678.35", 0.45], ["KOSDAQ", "KOSDAQ", "kr", "865.43", 0.72],
     ["KOSPI200", "KOSPI 200", "kr", "365.82", 0.49], ["USDKRW", "USD/KRW", "kr", "1,356.40", -0.32],
     ["KR3Y", "국고채 3년", "kr", "3.21%", -0.04],
-  ].map(([symbol, label, market, value, change_pct]) => ({ symbol: String(symbol), label: String(label), market: market as "us" | "kr", value: String(value), change_pct: Number(change_pct), as_of: asOf, stale: false })),
+  ].map(([symbol, label, market, value, change_pct]) => ({ symbol: String(symbol), label: String(label), market: market as "us" | "kr", value: String(value), change_pct: Number(change_pct), as_of: asOf, stale: false, basis: market === "us" ? "close" as const : "delayed" as const })),
   heatmap: [
     ["NVDA","NVIDIA","기술","반도체",171.38,-2.21,24], ["AAPL","Apple","기술","소비자 전자제품",210.02,0.14,23],
     ["MSFT","Microsoft","기술","소프트웨어",510.05,-1.81,22], ["AVGO","Broadcom","기술","반도체",274.31,-0.97,15],
@@ -38,25 +38,25 @@ export const fallbackDashboard: Dashboard = {
     { id: "bok-ppi", source: "bok", country: "KR", category: "물가", title: "한국 생산자물가지수", scheduled_at: "2026-07-20T06:00:00+09:00", importance: "medium", source_url: "https://www.bok.or.kr/portal/submain/submain/sts.do?menuNo=200094&viewType=SUBMAIN" },
   ],
   issues: [
-    { id: "cpi", title: "미국 물가 둔화 기대", summary: "인플레이션 둔화 흐름이 금리 인하 기대를 지지하고 있습니다.", sentiment: "positive", article_count: 24, category: "거시·금리", articles: [
+    { id: "cpi", title: "미국 물가 둔화 기대", summary: "인플레이션 둔화 흐름이 금리 인하 기대를 지지하고 있습니다.", sentiment: "positive", article_count: 24, category: "거시·금리", summary_method: "source_excerpt", articles: [
       { id:"cpi-1", title:"미국 소비자물가 둔화, 금리 경로에 관심", publisher:"연합뉴스", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:true },
       { id:"cpi-2", title:"인플레이션 압력 완화에 미국 증시 상승", publisher:"한국경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
       { id:"cpi-3", title:"시장 예상과 부합한 CPI, 연준 판단은", publisher:"매일경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
     ] },
-    { id: "hbm", title: "HBM 수요 기대", summary: "AI 가속기 수요가 국내 반도체 공급망에 우호적으로 작용할 가능성이 있습니다.", sentiment: "positive", article_count: 18, category: "반도체", articles: [
+    { id: "hbm", title: "HBM 수요 기대", summary: "AI 가속기 수요가 국내 반도체 공급망에 우호적으로 작용할 가능성이 있습니다.", sentiment: "positive", article_count: 18, category: "반도체", summary_method: "source_excerpt", articles: [
       { id:"hbm-1", title:"AI 서버 투자 확대에 HBM 수요 지속", publisher:"전자신문", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:true },
       { id:"hbm-2", title:"국내 반도체 공급망, 차세대 HBM 대응", publisher:"서울경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
       { id:"hbm-3", title:"글로벌 AI 투자와 메모리 업황 전망", publisher:"이데일리", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
     ] },
-    { id: "oil", title: "국제유가 상승", summary: "공급 불확실성으로 운송·화학 업종 비용 부담이 커질 수 있습니다.", sentiment: "negative", article_count: 15, category: "에너지", articles: [
+    { id: "oil", title: "국제유가 상승", summary: "공급 불확실성으로 운송·화학 업종 비용 부담이 커질 수 있습니다.", sentiment: "negative", article_count: 15, category: "에너지", summary_method: "source_excerpt", articles: [
       { id:"oil-1", title:"공급 우려에 국제유가 상승세", publisher:"아시아경제", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:true },
       { id:"oil-2", title:"유가 상승이 운송·화학 업종에 미칠 영향", publisher:"머니투데이", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
       { id:"oil-3", title:"지정학적 긴장과 원유 공급 전망", publisher:"뉴스1", published_at:asOf, url:"https://finance.naver.com/news/", is_representative:false },
     ] },
   ],
   disclosures: [
-    { id: "dart-1", company: "삼성전자", title: "기업설명회 개최", importance: "medium", filed_at: asOf },
-    { id: "dart-2", company: "SK하이닉스", title: "신규 시설투자", importance: "high", filed_at: asOf },
+    { id: "dart-1", company: "삼성전자", title: "기업설명회 개최", importance: "medium", filed_at: asOf, source_url: "https://dart.fss.or.kr/" },
+    { id: "dart-2", company: "SK하이닉스", title: "신규 시설투자", importance: "high", filed_at: asOf, source_url: "https://dart.fss.or.kr/" },
   ],
   kcif: [
     { id: "kcif-rates", title: "미국 국채금리 방향 전환", summary: "장기 금리 하락은 성장주 가치평가 부담을 일부 낮출 수 있습니다.", topic: "금리", source_url: "https://www.kcif.or.kr/annual/newsflashList", as_of: asOf },
