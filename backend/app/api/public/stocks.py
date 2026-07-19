@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,11 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.collectors.kis import kis_client
+from app.core.config import settings
 from app.core.database import get_db
 from app.market_catalog import stock_catalog
 from app.models.market_quote import MarketQuote
-from app.realtime import market_stream
 from app.repositories.dashboard import DashboardRepository
+from app.repositories.realtime import RealtimeRepository
 from app.repositories.stock_master import StockMasterRepository
 
 router = APIRouter(tags=["stocks"])
@@ -53,7 +54,7 @@ async def stock_detail(symbol: str, interval: str = Query(default="daily", patte
 
     if metadata["market"] == "kr":
         quote = await kis_client.domestic_price(symbol)
-        live = market_stream.latest.get(symbol)
+        live = RealtimeRepository(db).latest_tick(symbol, settings.realtime_tick_max_age_seconds)
         if live:
             quote.update({"price": Decimal(str(live["price"])), "change": Decimal(str(live["change"])),
                           "change_pct": Decimal(str(live["change_pct"])),

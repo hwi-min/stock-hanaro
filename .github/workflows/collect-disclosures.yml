@@ -1,9 +1,6 @@
 name: Collect Disclosures
 
 on:
-  schedule:
-    # KST weekdays 09:00-18:30
-    - cron: "*/30 0-9 * * 1-5"
   workflow_dispatch:
     inputs:
       business_date:

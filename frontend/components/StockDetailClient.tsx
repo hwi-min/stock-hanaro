@@ -8,7 +8,8 @@ import type { StockDetail, StockInterval } from "@/lib/types";
 import { saveRecentStock } from "@/lib/recent-stocks";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/backend-api";
-type LiveQuote = { type: string; item?: { symbol: string; price: number; change: number; change_pct: number; as_of: string } };
+type Quote = { symbol: string; price: number; change: number; change_pct: number; as_of: string };
+type LiveQuote = { type: string; item?: Quote; items?: Quote[] };
 
 export function StockDetailClient({ symbol }: { symbol: string }) {
   const [interval, setInterval] = useState<StockInterval>("daily");
@@ -31,10 +32,11 @@ export function StockDetailClient({ symbol }: { symbol: string }) {
     source.onmessage = event => {
       try {
         const payload = JSON.parse(event.data) as LiveQuote;
-        if (payload.type !== "quote" || payload.item?.symbol !== symbol) return;
-        setStock(current => current ? { ...current, price: payload.item!.price, change: payload.item!.change,
-          change_pct: payload.item!.change_pct, as_of: payload.item!.as_of, basis: "realtime",
-          chart: current.chart.length ? current.chart.map((point, index) => index === current.chart.length - 1 ? { ...point, close: payload.item!.price } : point) : current.chart } : current);
+        const quote = (payload.items ?? (payload.item ? [payload.item] : [])).find(item => item.symbol === symbol);
+        if (payload.type !== "quote" || !quote) return;
+        setStock(current => current ? { ...current, price: quote.price, change: quote.change,
+          change_pct: quote.change_pct, as_of: quote.as_of, basis: "realtime",
+          chart: current.chart.length ? current.chart.map((point, index) => index === current.chart.length - 1 ? { ...point, close: quote.price } : point) : current.chart } : current);
       } catch { return; }
     };
     return () => source.close();

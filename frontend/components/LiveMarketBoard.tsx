@@ -17,7 +17,7 @@ export function LiveMarketBoard({ initialMetrics }: { initialMetrics: MarketMetr
       try { payload = JSON.parse(event.data) as StreamEvent; }
       catch { return; }
       setConnected(payload.connected);
-      const updates = payload.type === "snapshot" ? payload.items ?? [] : payload.item ? [payload.item] : [];
+      const updates = payload.items ?? (payload.item ? [payload.item] : []);
       if (!updates.length) return;
       setMetrics(current => current.map(metric => {
         const update = updates.find(item => item.symbol === metric.symbol);

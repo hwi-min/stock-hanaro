@@ -75,12 +75,12 @@ GitHub 저장소의 `Settings → Secrets and variables → Actions`에 다음 �
 OpenAI API가 없는 동안 `collect-news`는 실제 기사만 사용한 규칙 기반 이슈 묶음과 추출 요약을 함께
 생성합니다. 분류·중복 제거·요약 기준은 [비-AI 뉴스 이슈 생성 정책](docs/rule-based-news-issues.md)을 따릅니다.
 
-국내 실시간 스트림은 항상 실행되는 백엔드 인스턴스에서 `KIS_REALTIME_ENABLED=true`로 활성화합니다.
+국내 실시간 스트림은 항상 실행되는 별도 worker에서 `KIS_REALTIME_ENABLED=true`로 활성화합니다.
 `KIS_KR_SYMBOLS`는 홈에서 항상 유지할 기본 종목이며, 상세 화면을 연 국내 종목은 자동 구독되고
 마지막 사용자가 화면을 닫으면 자동 해제됩니다. 동시 종목 한도는 지수 3개를 제외하고
-`KIS_MAX_REALTIME_STOCKS`(기본 37개)입니다. 구독 상태를 프로세스 메모리에서 관리하므로 실시간
-스트림을 담당하는 백엔드는 단일 worker로 실행합니다. 미국 지표와 미국시장 히트맵은 실시간
-스트림에 연결하지 않고 마지막 정규장 종가 스냅샷을 표시합니다.
+`KIS_MAX_REALTIME_STOCKS`(기본 37개)입니다. worker는 틱과 구독 상태를 PostgreSQL에 저장하고
+FastAPI는 DB 기반 SSE로 화면에 전달합니다. 미국 지표와 미국시장 히트맵은 실시간 스트림에
+연결하지 않고 마지막 정규장 종가 스냅샷을 표시합니다.
 
 휴장 중에도 인증·연결·구독 승인은 다음 명령으로 확인할 수 있습니다. 체결 틱과 화면 갱신은 국내 장중에
 `GET /api/market/status`의 `last_tick_at`과 홈의 `실시간` 표시로 최종 확인합니다.
@@ -119,3 +119,12 @@ npm run build
 수집기를 추가하기 전에 [`config/data-sources.json`](config/data-sources.json)에 저장, 화면 표시, 재배포, AI 입력 범위를 등록해야 합니다. 자세한 판단은 [`docs/data-source-policy.md`](docs/data-source-policy.md)를 참고하세요.
 
 > AI 요약은 출처 기반 참고 정보이며 투자 권유가 아닙니다. 외부 데이터의 공개 배포 범위는 공급자 정책과 계약을 최종 확인해야 합니다.
+
+## M3 OCI ARM64 배포
+
+운영 환경은 OCI Always Free Ampere A1 단일 VM의 k3s를 기준으로 합니다. Next.js, FastAPI,
+KIS WebSocket worker, PostgreSQL 16을 각각 컨테이너로 실행하고 Kustomize와 Argo CD로 배포합니다.
+GitHub Actions는 CI 성공 후 ARM64 이미지를 GHCR에 저장합니다.
+
+설치 순서, Secret 생성, HTTPS, 배치, migration, 백업과 복구 절차는
+[OCI k3s 배포 가이드](docs/oci-k3s-deployment.md)를 참고하세요. 실제 Secret 값은 저장소에 커밋하지 않습니다.

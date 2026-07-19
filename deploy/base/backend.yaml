@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: stock-hanaro-api
+spec:
+  selector:
+    app: stock-hanaro-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock-hanaro-api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: stock-hanaro-api
+  template:
+    metadata:
+      labels:
+        app: stock-hanaro-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: api
+          image: stock-hanaro-backend
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef: {name: stock-hanaro-config}
+            - secretRef: {name: stock-hanaro-app-secret}
+          readinessProbe:
+            httpGet: {path: /health/ready, port: 8000}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
