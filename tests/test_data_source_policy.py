@@ -39,6 +39,12 @@ class DataSourcePolicyTest(unittest.TestCase):
         self.assertEqual(schedule["retry_policy"], "retry_only_after_failure")
         self.assertTrue(schedule["skip_after_success_for_business_date"])
 
+    def test_official_calendar_sources_are_registered(self):
+        source = next(item for item in self.policy["sources"] if item["id"] == "official-economic-calendars")
+        self.assertTrue(source["allowed"]["collect"])
+        self.assertEqual(source["collection_schedule"]["times"], ["05:50", "06:10"])
+        self.assertEqual(len(source["official_documents"]), 4)
+
 
 if __name__ == "__main__":
     unittest.main()
