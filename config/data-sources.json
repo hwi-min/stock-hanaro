@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-07-17",
+  "reviewed_at": "2026-07-19",
   "sources": [
     {
       "id": "naver-finance-news",
@@ -111,6 +111,42 @@
       "official_documents": [
         "https://www.kcif.or.kr/annual/newsflashList",
         "https://www.gpters.org/wealth/post/7step-guide-automating-your-596ebN0wqXBUScG"
+      ]
+    },
+    {
+      "id": "official-economic-calendars",
+      "name": "공식 경제 일정 통합",
+      "category": "economic_calendar",
+      "status": "provisional",
+      "decision": "aggregate_free_official_calendars",
+      "allowed": {
+        "collect": true,
+        "store": true,
+        "display": true,
+        "redistribute": false,
+        "ai_input": true
+      },
+      "retention_days": 730,
+      "attribution": "BLS, BEA, Federal Reserve, 한국은행 원문 링크",
+      "collection_schedule": {
+        "timezone": "Asia/Seoul",
+        "times": ["05:50", "06:10"],
+        "retry_policy": "retry_only_after_failure",
+        "skip_after_success_for_business_date": true,
+        "final_failure_after": "06:10"
+      },
+      "notes": [
+        "BLS ICS, BEA JSON/ICS, Federal Reserve 캘린더, 한국은행 통계공표 일정을 통합한다.",
+        "원본 시간대를 UTC로 정규화하고 화면에서는 Asia/Seoul 기준으로 표시한다.",
+        "중요도는 CPI, PCE, 고용, GDP, FOMC, 금통위 등 내부 화이트리스트로 계산한다.",
+        "예상치와 실제치는 공식 원천이 제공하는 경우만 저장하며 임의로 생성하지 않는다.",
+        "홈에는 향후 24시간의 중요 일정만 표시하고 상세 화면에는 출처 링크를 제공한다."
+      ],
+      "official_documents": [
+        "https://www.bls.gov/schedule/news_release/bls.ics",
+        "https://www.bea.gov/news/schedule/icalendar",
+        "https://www.federalreserve.gov/newsevents/calendar.htm",
+        "https://www.bok.or.kr/portal/submain/submain/sts.do?menuNo=200094&viewType=SUBMAIN"
       ]
     }
   ]

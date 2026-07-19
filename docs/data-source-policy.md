@@ -15,6 +15,7 @@
 | Open DART | 예 | 예 | 아니요 | 예 | 구조화 필드와 원문 링크 사용, 공개 전 최종 검토 |
 | KIS Open API | 예 | 예 | 아니요 | 예 | 실시간 시장 데이터의 기본 공급자로 확정 |
 | KCIF 국제금융속보 | 예 | 예 | 아니요 | 예 | 당일 PDF 자동 다운로드·추출·AI 요약 |
+| 공식 경제 일정 | 예 | 예 | 아니요 | 예 | BLS·BEA·Federal Reserve·한국은행 무료 일정 통합 |
 
 ## 근거와 구현 규칙
 
@@ -60,6 +61,16 @@
 - 처리용 PDF 보존 기간은 최대 30일이며 운영 환경에서는 가능한 한 요약 완료 직후 삭제한다.
 
 구현 참고: [GPTers KCIF 자동화 가이드](https://www.gpters.org/wealth/post/7step-guide-automating-your-596ebN0wqXBUScG)
+
+### 공식 경제 일정
+
+- BLS의 공개 ICS, BEA의 JSON/ICS, Federal Reserve 캘린더와 한국은행 통계공표 일정을 통합한다.
+- 매일 05:50 Asia/Seoul에 갱신하고 실패할 때만 06:10에 다시 시도한다.
+- 원본 시각을 UTC로 저장하고 화면에는 한국시간을 표시한다. 홈에는 향후 24시간의 중요 일정만 노출한다.
+- 중요도는 CPI, PCE, 고용, GDP, FOMC, 금통위 등 사전에 검토한 화이트리스트로 결정한다.
+- 공식 원천이 제공하지 않는 시장 예상치나 실제치를 임의로 만들지 않는다.
+
+공식 문서: [BLS ICS](https://www.bls.gov/schedule/news_release/bls.ics), [BEA Calendar](https://www.bea.gov/news/schedule/icalendar), [Federal Reserve Calendar](https://www.federalreserve.gov/newsevents/calendar.htm), [한국은행 통계공표일정](https://www.bok.or.kr/portal/submain/submain/sts.do?menuNo=200094&viewType=SUBMAIN)
 
 ## 승인 절차
 
