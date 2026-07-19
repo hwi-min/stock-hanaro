@@ -3,11 +3,11 @@ name: Collect KCIF
 on:
   schedule:
     # UTC: 21:00, 22:00, 22:30, 23:00, 23:30 = KST: 06:00, 07:00, 07:30, 08:00, 08:30
-    - cron: "0 21 * * *"
-    - cron: "0 22 * * *"
-    - cron: "30 22 * * *"
-    - cron: "0 23 * * *"
-    - cron: "30 23 * * *"
+    - cron: "0 21 * * 0-4"
+    - cron: "0 22 * * 0-4"
+    - cron: "30 22 * * 0-4"
+    - cron: "0 23 * * 0-4"
+    - cron: "30 23 * * 0-4"
   workflow_dispatch:
     inputs:
       business_date:
@@ -37,7 +37,14 @@ jobs:
           INPUT_BUSINESS_DATE: ${{ inputs.business_date }}
           SCHEDULE: ${{ github.event.schedule }}
         run: |
-          business_date="${INPUT_BUSINESS_DATE:-$(TZ=Asia/Seoul date +%F)}"
+          if [[ -n "$INPUT_BUSINESS_DATE" ]]; then
+            business_date="$INPUT_BUSINESS_DATE"
+          else
+            business_date="$(TZ=Asia/Seoul date +%F)"
+            weekday="$(TZ=Asia/Seoul date +%u)"
+            if [[ "$weekday" == "6" ]]; then business_date="$(TZ=Asia/Seoul date -d 'yesterday' +%F)"; fi
+            if [[ "$weekday" == "7" ]]; then business_date="$(TZ=Asia/Seoul date -d '2 days ago' +%F)"; fi
+          fi
           slot="${SCHEDULE:-manual-${GITHUB_RUN_ID}}"
           slot="${slot// /-}"
           echo "business_date=${business_date}" >> "$GITHUB_OUTPUT"

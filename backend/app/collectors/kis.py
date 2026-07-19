@@ -350,7 +350,11 @@ class KISClient:
             try:
                 quotes.append(await self.overseas_index(symbol, code, name))
             except Exception as exc:
-                errors.append(f"{symbol}: {exc}")
+                # KIS doesn't consistently publish RUT/VIX through this endpoint.
+                # They remain best-effort dashboard metrics and must not invalidate
+                # the successfully collected close snapshot.
+                if symbol not in OPTIONAL_OVERSEAS_INDICES:
+                    errors.append(f"{symbol}: {exc}")
             await asyncio.sleep(settings.kis_request_interval_seconds)
         try:
             quotes.append(await self.gold())
@@ -406,5 +410,6 @@ US_HEATMAP_UNIVERSE = {
 
 DOMESTIC_INDICES = (("KOSPI", "0001", "코스피"), ("KOSDAQ", "1001", "코스닥"), ("KOSPI200", "2001", "코스피 200"))
 OVERSEAS_INDICES = (("SPX", "SPX", "S&P 500"), ("NASDAQ", "COMP", "NASDAQ"), ("DOW30", ".DJI", "Dow 30"), ("RUSSELL2000", "RUT", "Russell 2000"), ("VIX", "VIX", "VIX"))
+OPTIONAL_OVERSEAS_INDICES = {"RUSSELL2000", "VIX"}
 
 kis_client = KISClient()

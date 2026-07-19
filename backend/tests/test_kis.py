@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.collectors.kis import DOMESTIC_INDICES, OVERSEAS_INDICES, US_HEATMAP_UNIVERSE, decimal_or_none
+from app.collectors.kis import DOMESTIC_INDICES, OPTIONAL_OVERSEAS_INDICES, OVERSEAS_INDICES, US_HEATMAP_UNIVERSE, decimal_or_none
 
 
 def test_market_universe_has_required_taxonomy_and_exchange():
@@ -12,6 +12,7 @@ def test_market_universe_has_required_taxonomy_and_exchange():
 def test_dashboard_indices_are_configured():
     assert {item[0] for item in DOMESTIC_INDICES} == {"KOSPI", "KOSDAQ", "KOSPI200"}
     assert {item[0] for item in OVERSEAS_INDICES} == {"SPX", "NASDAQ", "DOW30", "RUSSELL2000", "VIX"}
+    assert OPTIONAL_OVERSEAS_INDICES == {"RUSSELL2000", "VIX"}
 
 
 def test_decimal_parser_handles_api_values():

@@ -61,7 +61,7 @@ GitHub Actions가 배포된 Internal Job API를 호출해 다음 주기로 데�
 - DART 공시: 평일 한국시간 09:00~18:30, 30분 간격
 - 공식 경제 일정: 매일 한국시간 05:20
 - KRX 종목 마스터: 평일 한국시간 07:40에 KIS 공식 KOSPI·KOSDAQ 종목정보를 갱신
-- KCIF: 한국시간 06:00, 07:00, 07:30, 08:00, 08:30 순서로 실패 시에만 재시도
+- KCIF: 평일 한국시간 06:00, 07:00, 07:30, 08:00, 08:30 순서로 실패 시에만 재시도
 - AI 요약: API Billing 활성화 전에는 수동 실행만 제공
 
 모든 워크플로는 Job API의 응답 상태가 `succeeded` 또는 `skipped`가 아니면 실패합니다. GitHub Actions의 성공 표시가 실제 파이프라인 실패를 가리지 않습니다.
@@ -90,6 +90,15 @@ backend/.venv/bin/python scripts/verify_kis_realtime.py --timeout 15
 ```
 
 ## 검증
+
+M2 API·DB·수집 파이프라인을 읽기 전용으로 통합 점검합니다.
+
+```bash
+python3 scripts/check_m2_integration.py
+```
+
+AI를 제외한 수집 Job을 실제 실행한 뒤 점검하려면 `--run-jobs`를 사용합니다. 이 명령은 데이터를
+변경합니다. 옵션과 판정 기준은 [M2 통합 점검 가이드](docs/m2-integration-check.md)를 참고하세요.
 
 ```bash
 python3 scripts/validate_data_sources.py
