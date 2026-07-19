@@ -13,16 +13,19 @@ type LiveQuote = { type: string; item?: { symbol: string; price: number; change:
 export function StockDetailClient({ symbol }: { symbol: string }) {
   const [interval, setInterval] = useState<StockInterval>("daily");
   const [stock, setStock] = useState<StockDetail | null>(null);
-  const [error, setError] = useState("");
+  const [requestError, setRequestError] = useState<{ key: string; message: string } | null>(null);
+  const requestKey = `${symbol}:${interval}`;
   useEffect(() => {
-    setError("");
+    const key = `${symbol}:${interval}`;
     fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?interval=${interval}`, { cache: "no-store" })
       .then(async response => { if (!response.ok) throw new Error(response.status === 404 ? "지원하는 종목을 찾지 못했습니다." : "시세를 불러오지 못했습니다."); return response.json() as Promise<StockDetail>; })
-      .then(setStock).catch(reason => setError(reason.message));
+      .then(value => { setStock(value); setRequestError(null); })
+      .catch(reason => setRequestError({ key, message: reason.message }));
   }, [symbol, interval]);
+  const recentSymbol = stock?.symbol, recentName = stock?.name, recentMarket = stock?.market;
   useEffect(() => {
-    if (stock) saveRecentStock({ symbol: stock.symbol, name: stock.name, market: stock.market });
-  }, [stock?.symbol, stock?.name, stock?.market]);
+    if (recentSymbol && recentName && recentMarket) saveRecentStock({ symbol: recentSymbol, name: recentName, market: recentMarket });
+  }, [recentSymbol, recentName, recentMarket]);
   useEffect(() => {
     const source = new EventSource(`${API_BASE_URL}/api/market/stream`);
     source.onmessage = event => {
@@ -42,6 +45,7 @@ export function StockDetailClient({ symbol }: { symbol: string }) {
     fetch(url, { method: "POST" }).catch(() => undefined);
     return () => { fetch(url, { method: "DELETE", keepalive: true }).catch(() => undefined); };
   }, [stock?.market, symbol]);
+  const error = requestError?.key === requestKey ? requestError.message : "";
   if (error) return <main className="detail-page"><div className="error-card">{error}</div></main>;
   if (!stock) return <main className="detail-page"><div className="loading-card">KIS 시세와 차트를 불러오는 중입니다.</div></main>;
   const positive = stock.change_pct >= 0;

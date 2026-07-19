@@ -16,7 +16,7 @@ export function SearchBox() {
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (!query.trim()) { setItems([]); setOpen(false); return; }
+    if (!query.trim()) return;
     timer.current = setTimeout(async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/search?q=${encodeURIComponent(query.trim())}`);
@@ -27,14 +27,18 @@ export function SearchBox() {
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [query]);
 
+  const updateQuery = (value: string) => {
+    setQuery(value);
+    if (!value.trim()) { setItems([]); setOpen(false); }
+  };
+
   const choose = (item: Result) => {
     setOpen(false); setQuery("");
     router.push(item.type === "stock" ? `/stocks/${encodeURIComponent(item.id)}` : `/issues/${encodeURIComponent(item.id)}`);
   };
   return <div className="global-search">
     <input aria-label="종목·이슈 검색" placeholder="종목·이슈 검색" value={query}
-      onFocus={() => query && setOpen(true)} onChange={event => setQuery(event.currentTarget.value)}
-      onInput={event => setQuery(event.currentTarget.value)} onKeyUp={event => setQuery(event.currentTarget.value)}
+      onFocus={() => query && setOpen(true)} onChange={event => updateQuery(event.currentTarget.value)}
       onKeyDown={event => {
         if (!open || !items.length) return;
         if (event.key === "ArrowDown") { event.preventDefault(); setActive(value => (value + 1) % items.length); }

@@ -24,12 +24,14 @@ export function StocksExplorer() {
   const [searched, setSearched] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => setRecent(loadRecentStocks()), []);
+  useEffect(() => {
+    const loadTimer = window.setTimeout(() => setRecent(loadRecentStocks()), 0);
+    return () => window.clearTimeout(loadTimer);
+  }, []);
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     const term = query.trim();
-    if (!term) { setResults([]); setSearched(false); setLoading(false); return; }
-    setLoading(true);
+    if (!term) return;
     timer.current = setTimeout(async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/api/search?q=${encodeURIComponent(term)}`, { cache: "no-store" });
@@ -44,12 +46,18 @@ export function StocksExplorer() {
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [query]);
 
+  const updateQuery = (value: string) => {
+    const term = value.trim();
+    setQuery(value); setLoading(Boolean(term)); setSearched(false);
+    if (!term) setResults([]);
+  };
+
   const remember = (stock: RecentStock) => setRecent(saveRecentStock(stock));
   return <>
     <section className="stock-search-panel">
       <label htmlFor="stock-page-search">국내 종목 검색</label>
       <div><input id="stock-page-search" autoComplete="off" autoFocus value={query}
-        onChange={event => setQuery(event.currentTarget.value)} placeholder="기업명 또는 6자리 종목코드 입력" />
+        onChange={event => updateQuery(event.currentTarget.value)} placeholder="기업명 또는 6자리 종목코드 입력" />
         <span>{loading ? "검색 중" : "KOSPI · KOSDAQ 보통주"}</span></div>
       {query.trim() && <div className="stock-search-results" aria-live="polite">
         {results.map(item => <Link href={`/stocks/${encodeURIComponent(item.id)}`} key={item.id}
