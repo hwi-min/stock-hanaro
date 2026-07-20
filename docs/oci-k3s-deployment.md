@@ -131,7 +131,7 @@ API와 worker는 메모리를 공유하지 않는다. worker가 실시간 틱, �
 
 정기 수집은 Kubernetes CronJob을 기준으로 한다. 기존 GitHub Actions 수집 workflow는 장애 대응용 수동 실행만 유지한다.
 
-KCIF는 평일 06:00에 처음 실행하고 07:00, 07:30, 08:00, 08:30에 재실행한다. JobService의 당일 성공 기록을 확인하므로 앞선 실행이 성공했다면 뒤의 CronJob은 `skipped`로 끝난다.
+KCIF는 평일 07:00에 처음 실행하고 07:30, 08:00, 08:30, 09:00에 재실행한다. JobService의 당일 성공 기록을 확인하므로 앞선 실행이 성공했다면 뒤의 CronJob은 `skipped`로 끝난다.
 
 CronJob은 `concurrencyPolicy: Forbid`로 중복 실행을 차단한다. Job은 DB에 idempotency key와 실행 결과를 남긴다.
 
