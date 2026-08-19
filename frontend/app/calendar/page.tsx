@@ -12,10 +12,10 @@ export default async function CalendarPage() {
   const schedules = [...data.schedules].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
   return <DetailPage eyebrow="OFFICIAL ECONOMIC CALENDAR" title="주요 경제 일정" description="BLS, BEA, 미 연방준비제도와 한국은행의 공식 발표 일정을 한국시간으로 통합합니다.">
     <div className="calendar-filters" aria-label="일정 필터"><span className="active">전체</span><span>미국</span><span>한국</span><span>중요 일정</span></div>
-    <Section title="향후 24시간"><div className="calendar-list">{schedules.map(item => {
+    <Section title="이번 주 월요일부터 일요일까지"><div className="calendar-list">{schedules.map(item => {
       const scheduled = new Date(item.scheduled_at);
       return <article key={item.id}>
-        <time><strong>{new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(scheduled)}</strong><small>{new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit" }).format(scheduled)}</small></time>
+        <time><strong>{new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(scheduled)}</strong><small>{new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", weekday: "short" }).format(scheduled)}</small></time>
         <span className={`country-flag ${item.country.toLowerCase()}`}>{item.country}</span>
         <div><small>{item.category} · 출처: {sourceLabels[item.source]}</small><b>{item.title}</b></div>
         <em className={`badge ${item.importance}`}>{importanceLabels[item.importance]}</em>

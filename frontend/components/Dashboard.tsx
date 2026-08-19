@@ -6,7 +6,10 @@ import { LiveMarketBoard } from "./LiveMarketBoard";
 import { disclosureUrl } from "@/lib/disclosures";
 
 const sentimentLabel = { positive: "긍정", neutral: "중립", negative: "부정" };
-const formatScheduleTime = (value: string) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value));
+const formatScheduleTime = (value: string) => new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul", month: "numeric", day: "numeric", weekday: "short",
+  hour: "2-digit", minute: "2-digit", hour12: false,
+}).format(new Date(value));
 
 export function Dashboard({ data }: { data: DashboardType }) {
   return <main className="dashboard">
@@ -21,7 +24,7 @@ export function Dashboard({ data }: { data: DashboardType }) {
 
     <div className="grid main-grid">
       <Section title="미국시장 히트맵 · 마지막 정규장 종가 기준" href="/markets" className="heatmap-panel"><MarketHeatmap items={data.heatmap} compact /></Section>
-      <Section title="오늘의 주요 일정" href="/calendar"><div className="list">{data.schedules.map(item => <div key={item.id}><time>{formatScheduleTime(item.scheduled_at)}</time><b>{item.title}</b><span className={`badge ${item.importance}`}>{item.importance === "high" ? "중요" : item.importance === "medium" ? "보통" : "낮음"}</span></div>)}</div></Section>
+      <Section title="이번 주 주요 일정" href="/calendar"><div className="list">{data.schedules.map(item => <div key={item.id}><time>{formatScheduleTime(item.scheduled_at)}</time><b>{item.title}</b><span className={`badge ${item.importance}`}>{item.importance === "high" ? "중요" : item.importance === "medium" ? "보통" : "낮음"}</span></div>)}</div></Section>
       <Section title="오늘의 주요 이슈" href="/issues"><div className="issue-list">{data.issues.map(item => <Link key={item.id} href={`/issues/${item.id}`}><div><b>{item.title}</b><p>{item.summary}</p></div><span className={`sentiment ${item.sentiment}`}>{sentimentLabel[item.sentiment]}</span></Link>)}</div></Section>
     </div>
 

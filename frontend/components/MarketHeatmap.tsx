@@ -1,43 +1,113 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { HeatmapItem } from "@/lib/types";
 
-const sectorOrder = ["기술", "커뮤니케이션", "경기소비재", "금융", "헬스케어", "필수소비재", "에너지", "산업재"];
+type Rect = { x: number; y: number; width: number; height: number };
+type Weighted<T> = { value: T; weight: number };
+type Positioned<T> = Weighted<T> & { rect: Rect };
+
+const ROOT_RECT: Rect = { x: 0, y: 0, width: 100, height: 100 };
+
+function layoutWeighted<T>(entries: Weighted<T>[], rect: Rect): Positioned<T>[] {
+  if (!entries.length) return [];
+  if (entries.length === 1) return [{ ...entries[0], rect }];
+
+  const sorted = [...entries].sort((a, b) => b.weight - a.weight);
+  const total = sorted.reduce((sum, entry) => sum + entry.weight, 0);
+  let splitAt = 1;
+  let running = sorted[0].weight;
+  for (let index = 1; index < sorted.length; index += 1) {
+    if (Math.abs(total / 2 - running) < Math.abs(total / 2 - (running + sorted[index].weight))) break;
+    running += sorted[index].weight;
+    splitAt = index + 1;
+  }
+
+  const first = sorted.slice(0, splitAt);
+  const second = sorted.slice(splitAt);
+  const ratio = first.reduce((sum, entry) => sum + entry.weight, 0) / total;
+  const vertical = rect.width >= rect.height;
+  const firstRect = vertical
+    ? { ...rect, width: rect.width * ratio }
+    : { ...rect, height: rect.height * ratio };
+  const secondRect = vertical
+    ? { x: rect.x + firstRect.width, y: rect.y, width: rect.width - firstRect.width, height: rect.height }
+    : { x: rect.x, y: rect.y + firstRect.height, width: rect.width, height: rect.height - firstRect.height };
+
+  return [...layoutWeighted(first, firstRect), ...layoutWeighted(second, secondRect)];
+}
 
 function heatClass(change: number) {
+  if (change >= 3) return "gain-max";
   if (change >= 2) return "gain-strong";
-  if (change > 0) return "gain";
+  if (change >= 1) return "gain";
+  if (change <= -3) return "loss-max";
   if (change <= -2) return "loss-strong";
-  if (change < 0) return "loss";
+  if (change <= -1) return "loss";
   return "flat";
+}
+
+function positionStyle(rect: Rect) {
+  return { left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` };
 }
 
 export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]; compact?: boolean }) {
   const [hovered, setHovered] = useState<HeatmapItem | null>(null);
-  const sectors = sectorOrder
-    .map(sector => ({ sector, items: items.filter(item => item.sector === sector) }))
-    .filter(group => group.items.length);
+  const [zoom, setZoom] = useState(1);
+  const sectors = useMemo(() => {
+    const grouped = new Map<string, HeatmapItem[]>();
+    for (const item of items) grouped.set(item.sector, [...(grouped.get(item.sector) ?? []), item]);
+    return layoutWeighted([...grouped].map(([sector, sectorItems]) => ({
+      value: { sector, items: sectorItems },
+      weight: sectorItems.reduce((sum, item) => sum + Math.max(item.market_cap_weight, .1), 0),
+    })), ROOT_RECT);
+  }, [items]);
 
-  return <div className={`sector-map ${compact ? "compact" : "detail"}`} onMouseLeave={() => setHovered(null)}>
-    {sectors.map(group => <section className="sector-group" key={group.sector} style={{ flexGrow: group.items.reduce((sum, item) => sum + item.market_cap_weight, 0) }}>
-      <h3>{group.sector}</h3>
-      <div className="sector-stocks">{group.items.map(item => <Link
-        href={`/stocks/${encodeURIComponent(item.symbol)}`}
-        key={item.symbol}
-        className={`heat-stock ${heatClass(item.change_pct)}`}
-        style={{ flexGrow: item.market_cap_weight, flexBasis: compact ? `${Math.max(item.market_cap_weight * 1.8, 22)}%` : `${Math.max(item.market_cap_weight * 1.5, 18)}%` }}
-        onMouseEnter={() => setHovered(item)}
-        aria-label={`${item.name} ${item.change_pct}%`}
-      ><strong>{item.symbol}</strong><span>{item.change_pct > 0 ? "+" : ""}{item.change_pct.toFixed(2)}%</span>{!compact && <small>{item.industry}</small>}</Link>)}</div>
-    </section>)}
-
-    {!compact && hovered && <aside className="heat-tooltip" aria-live="polite">
-      <div><span>{hovered.sector} · {hovered.industry}</span><b>{hovered.symbol}</b><small>{hovered.name}</small></div>
-      <div className="tooltip-price"><strong>${hovered.price.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong><em className={hovered.change_pct >= 0 ? "up" : "down"}>{hovered.change_pct > 0 ? "+" : ""}{hovered.change_pct.toFixed(2)}%</em></div>
-      <div className="tooltip-chart" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></div>
-      <p>클릭하면 종목 상세 정보를 확인할 수 있습니다.</p>
-    </aside>}
+  return <div className={`heatmap-shell ${compact ? "compact" : "detail"}`}>
+    {!compact && <div className="heatmap-toolbar">
+      <p><b>시장 전체</b><span>섹터 · 산업군 · 종목</span></p>
+      <div><button onClick={() => setZoom(value => Math.max(1, value - .25))} disabled={zoom === 1} aria-label="히트맵 축소">−</button><strong>{Math.round(zoom * 100)}%</strong><button onClick={() => setZoom(value => Math.min(2, value + .25))} disabled={zoom === 2} aria-label="히트맵 확대">＋</button></div>
+    </div>}
+    <div className="heatmap-viewport" onMouseLeave={() => setHovered(null)}>
+      <div className="sector-map" style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}>
+        {sectors.map(group => {
+          const industries = new Map<string, HeatmapItem[]>();
+          for (const item of group.value.items) industries.set(item.industry, [...(industries.get(item.industry) ?? []), item]);
+          const industryLayout = layoutWeighted([...industries].map(([industry, industryItems]) => ({
+            value: { industry, items: industryItems },
+            weight: industryItems.reduce((sum, item) => sum + Math.max(item.market_cap_weight, .1), 0),
+          })), ROOT_RECT);
+          return <section className="sector-group" key={group.value.sector} style={positionStyle(group.rect)}>
+            <h3>{group.value.sector}</h3>
+            <div className="industry-map">{industryLayout.map(industry => {
+              const stockLayout = layoutWeighted(industry.value.items.map(item => ({ value: item, weight: Math.max(item.market_cap_weight, .1) })), ROOT_RECT);
+              return <section className="industry-group" key={industry.value.industry} style={positionStyle(industry.rect)}>
+                <h4>{industry.value.industry}</h4>
+                <div className="industry-stocks">{stockLayout.map(({ value: item, rect }) => {
+                  const area = rect.width * rect.height;
+                  return <Link href={`/stocks/${encodeURIComponent(item.symbol)}`} key={item.symbol}
+                    className={`heat-stock ${heatClass(item.change_pct)} ${area < 650 ? "small" : "large"}`}
+                    style={positionStyle(rect)} onMouseEnter={() => setHovered(item)}
+                    title={`${item.name} · ${item.change_pct > 0 ? "+" : ""}${item.change_pct.toFixed(2)}%`}
+                    aria-label={`${item.name} ${item.change_pct}%`}>
+                    <strong>{item.symbol}</strong><span>{item.change_pct > 0 ? "+" : ""}{item.change_pct.toFixed(2)}%</span>
+                  </Link>;
+                })}</div>
+              </section>;
+            })}</div>
+          </section>;
+        })}
+      </div>
+      {hovered && <aside className="heat-tooltip" aria-live="polite">
+        <div><span>{hovered.sector} · {hovered.industry}</span><b>{hovered.symbol}</b><small>{hovered.name}</small></div>
+        <div className="tooltip-price"><strong>${hovered.price.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong><em className={hovered.change_pct >= 0 ? "up" : "down"}>{hovered.change_pct > 0 ? "+" : ""}{hovered.change_pct.toFixed(2)}%</em></div>
+        <p>클릭하면 종목 상세 정보로 이동합니다.</p>
+      </aside>}
+    </div>
+    <div className="heatmap-legend" aria-label="등락률 색상 범례">
+      <span className="loss-max">-3%</span><span className="loss-strong">-2%</span><span className="loss">-1%</span><span className="flat">0%</span><span className="gain">+1%</span><span className="gain-strong">+2%</span><span className="gain-max">+3%</span>
+      <p>사각형 크기는 수집 종목 내 시가총액 비중, 색상은 전일 대비 등락률입니다.</p>
+    </div>
   </div>;
 }

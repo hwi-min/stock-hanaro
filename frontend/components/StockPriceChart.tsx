@@ -22,6 +22,9 @@ export function StockPriceChart({ points, interval, currency }: { points: ChartP
   const volumeY = (value: number) => volumeBottom - (value / maxVolume) * (volumeBottom - volumeTop);
   const labels = [visible[0], visible[Math.floor(visible.length / 2)], visible.at(-1)!];
   const active = hovered == null ? null : visible[hovered];
+  const previous = hovered == null || hovered === 0 ? null : visible[hovered - 1];
+  const activeChange = active && previous ? active.close - previous.close : null;
+  const activeChangePct = activeChange != null && previous?.close ? activeChange / previous.close * 100 : null;
   const money = new Intl.NumberFormat(currency === "KRW" ? "ko-KR" : "en-US", { maximumFractionDigits: currency === "KRW" ? 0 : 2 });
   const formatDate = (time: string) => interval === "minute" ? `${time.slice(0, 2)}:${time.slice(2, 4)}` : `${time.slice(0, 4)}.${time.slice(4, 6)}.${time.slice(6, 8)}`;
   const move = (event: MouseEvent<SVGSVGElement>) => {
@@ -48,7 +51,15 @@ export function StockPriceChart({ points, interval, currency }: { points: ChartP
       </svg>
       {active && <div className={`chart-tooltip ${hovered != null && hovered > visible.length * .66 ? "align-left" : ""}`} style={{ left: `${(x(hovered!) / 900) * 100}%` }}>
         <strong>{formatDate(active.time)}</strong>
-        <dl><dt>시가</dt><dd>{money.format(active.open ?? active.close)}</dd><dt>고가</dt><dd>{money.format(active.high ?? active.close)}</dd><dt>저가</dt><dd>{money.format(active.low ?? active.close)}</dd><dt>종가</dt><dd>{money.format(active.close)}</dd><dt>거래량</dt><dd>{(active.volume ?? 0).toLocaleString()}</dd></dl>
+        <dl>
+          <dt>시가</dt><dd>{money.format(active.open ?? active.close)}</dd>
+          <dt>고가</dt><dd>{money.format(active.high ?? active.close)}</dd>
+          <dt>저가</dt><dd>{money.format(active.low ?? active.close)}</dd>
+          <dt>종가</dt><dd>{money.format(active.close)}</dd>
+          <dt>전 봉 대비</dt><dd>{activeChange == null ? "-" : `${activeChange >= 0 ? "+" : ""}${money.format(activeChange)}`}</dd>
+          <dt>등락률</dt><dd>{activeChangePct == null ? "-" : `${activeChangePct >= 0 ? "+" : ""}${activeChangePct.toFixed(2)}%`}</dd>
+          <dt>거래량</dt><dd>{active.volume == null ? "-" : active.volume.toLocaleString()}</dd>
+        </dl>
       </div>}
     </div>
     <div className="chart-axis">{labels.map((point, index) => <span key={`${point.time}:${index}`}>{formatDate(point.time)}</span>)}</div>

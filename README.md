@@ -71,8 +71,8 @@ GitHub 저장소의 `Settings → Secrets and variables → Actions`에 다음 �
 - `BACKEND_API_BASE_URL`: 배포된 FastAPI 주소
 - `INTERNAL_JOB_SECRET`: FastAPI 환경변수와 동일한 내부 작업 비밀값
 
-각 워크플로는 `workflow_dispatch`로 수동 실행할 수 있습니다. `Summarize Content`는 OpenAI API 사용 한도가 준비된 후 수동 실행합니다.
-OpenAI API가 없는 동안 `collect-news`는 실제 기사만 사용한 규칙 기반 이슈 묶음과 추출 요약을 함께
+각 워크플로는 `workflow_dispatch`로 수동 실행할 수 있습니다. `Summarize Content`는 Solar API 사용 한도가 준비된 후 수동 실행합니다.
+Solar API가 없는 동안 `collect-news`는 실제 기사만 사용한 규칙 기반 이슈 묶음과 추출 요약을 함께
 생성합니다. 분류·중복 제거·요약 기준은 [비-AI 뉴스 이슈 생성 정책](docs/rule-based-news-issues.md)을 따릅니다.
 
 국내 실시간 스트림은 항상 실행되는 별도 worker에서 `KIS_REALTIME_ENABLED=true`로 활성화합니다.
