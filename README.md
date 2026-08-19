@@ -61,7 +61,7 @@ GitHub Actions가 배포된 Internal Job API를 호출해 다음 주기로 데�
 - DART 공시: 평일 한국시간 09:00~18:30, 30분 간격
 - 공식 경제 일정: 매일 한국시간 05:20
 - KRX 종목 마스터: 평일 한국시간 07:40에 KIS 공식 KOSPI·KOSDAQ 종목정보를 갱신
-- KCIF: 평일 한국시간 06:00, 07:00, 07:30, 08:00, 08:30 순서로 실패 시에만 재시도
+- KCIF: 평일 한국시간 07:00, 07:30, 08:00, 08:30, 09:00 순서로 실패 시에만 재시도
 - AI 요약: API Billing 활성화 전에는 수동 실행만 제공
 
 모든 워크플로는 Job API의 응답 상태가 `succeeded` 또는 `skipped`가 아니면 실패합니다. GitHub Actions의 성공 표시가 실제 파이프라인 실패를 가리지 않습니다.
@@ -71,8 +71,8 @@ GitHub 저장소의 `Settings → Secrets and variables → Actions`에 다음 �
 - `BACKEND_API_BASE_URL`: 배포된 FastAPI 주소
 - `INTERNAL_JOB_SECRET`: FastAPI 환경변수와 동일한 내부 작업 비밀값
 
-각 워크플로는 `workflow_dispatch`로 수동 실행할 수 있습니다. `Summarize Content`는 OpenAI API 사용 한도가 준비된 후 수동 실행합니다.
-OpenAI API가 없는 동안 `collect-news`는 실제 기사만 사용한 규칙 기반 이슈 묶음과 추출 요약을 함께
+각 워크플로는 `workflow_dispatch`로 수동 실행할 수 있습니다. `Summarize Content`는 Solar API 사용 한도가 준비된 후 수동 실행합니다.
+Solar API가 없는 동안 `collect-news`는 실제 기사만 사용한 규칙 기반 이슈 묶음과 추출 요약을 함께
 생성합니다. 분류·중복 제거·요약 기준은 [비-AI 뉴스 이슈 생성 정책](docs/rule-based-news-issues.md)을 따릅니다.
 
 국내 실시간 스트림은 항상 실행되는 별도 worker에서 `KIS_REALTIME_ENABLED=true`로 활성화합니다.

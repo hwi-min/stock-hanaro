@@ -128,7 +128,9 @@ class OfficialCalendarCollector:
                     events.extend(parse_ics(response.text, source, url))
                 except Exception as exc:
                     errors.append(f"{source.value}: {exc}")
-            for offset in (0, 1):
+            # Fetch adjacent months as well so a Monday-Sunday week crossing a
+            # month boundary is complete even on a fresh deployment.
+            for offset in (-1, 0, 1):
                 month = reference.month + offset
                 year = reference.year + (month - 1) // 12
                 month = (month - 1) % 12 + 1
@@ -139,12 +141,16 @@ class OfficialCalendarCollector:
                     events.extend(parse_fed_month(response.text, year, month, fed_url))
                 except Exception as exc:
                     errors.append(f"federal_reserve:{year}-{month:02d}: {exc}")
-            bok_url = f"{BOK_URL}?date={reference.year}-{reference.month:02d}&menuNo=200775"
-            try:
-                response = await client.get(bok_url)
-                response.raise_for_status()
-                events.extend(parse_bok(response.text, bok_url))
-            except Exception as exc:
-                errors.append(f"bok: {exc}")
+            for offset in (-1, 0, 1):
+                month = reference.month + offset
+                year = reference.year + (month - 1) // 12
+                month = (month - 1) % 12 + 1
+                bok_url = f"{BOK_URL}?date={year}-{month:02d}&menuNo=200775"
+                try:
+                    response = await client.get(bok_url)
+                    response.raise_for_status()
+                    events.extend(parse_bok(response.text, bok_url))
+                except Exception as exc:
+                    errors.append(f"bok:{year}-{month:02d}: {exc}")
         unique = {(event["source"], event["source_event_id"]): event for event in events}
         return list(unique.values()), errors

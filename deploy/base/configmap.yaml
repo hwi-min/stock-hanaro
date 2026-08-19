@@ -4,9 +4,13 @@ metadata:
   name: stock-hanaro-config
 data:
   APP_ENV: production
+  USE_SYSTEM_TRUST_STORE: "true"
   CORS_ORIGINS: https://stock.example.com
   KIS_IS_MOCK: "false"
   KIS_REALTIME_ENABLED: "true"
   REALTIME_TICK_MAX_AGE_SECONDS: "120"
+  SOLAR_API_BASE_URL: https://api.upstage.ai/v1
+  SOLAR_MODEL: solar-pro3
+  SOLAR_TIMEOUT_SECONDS: "60"
   BACKEND_API_BASE_URL: http://stock-hanaro-api:8000
   NEXT_PUBLIC_API_BASE_URL: /backend-api

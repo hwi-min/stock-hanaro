@@ -2,6 +2,7 @@ import re
 import json
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -20,6 +21,16 @@ METRIC_LABELS = {
     "VIX": "VIX", "GOLD": "Gold", "KOSPI": "KOSPI", "KOSDAQ": "KOSDAQ", "KOSPI200": "KOSPI 200",
     "USDKRW": "USD/KRW", "KTB3Y": "국고채 3년",
 }
+
+KST = ZoneInfo("Asia/Seoul")
+
+
+def current_week_bounds_utc(now: datetime) -> tuple[datetime, datetime]:
+    """Return the KST Monday-to-Monday range containing ``now`` in UTC."""
+    now_kst = now.astimezone(KST)
+    monday = now_kst.date() - timedelta(days=now_kst.weekday())
+    start_kst = datetime.combine(monday, time.min, tzinfo=KST)
+    return start_kst.astimezone(timezone.utc), (start_kst + timedelta(days=7)).astimezone(timezone.utc)
 
 
 def aware(value: datetime | None) -> datetime | None:
@@ -69,10 +80,10 @@ class DashboardRepository:
         } for row in rows]
 
     def schedules(self, now: datetime) -> list[dict]:
-        end = now + timedelta(days=2)
+        start, end = current_week_bounds_utc(now)
         rows = self.db.scalars(select(EconomicEvent).where(
-            EconomicEvent.scheduled_at_utc >= now, EconomicEvent.scheduled_at_utc < end,
-        ).order_by(EconomicEvent.scheduled_at_utc).limit(8)).all()
+            EconomicEvent.scheduled_at_utc >= start, EconomicEvent.scheduled_at_utc < end,
+        ).order_by(EconomicEvent.scheduled_at_utc)).all()
         return [{
             "id": f"{row.source}:{row.source_event_id}", "source": row.source, "country": row.country,
             "category": row.category, "title": row.title, "scheduled_at": aware(row.scheduled_at_kst),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DetailPage } from "./DetailPage";
 import { Section } from "./Section";
 import { StockPriceChart } from "./StockPriceChart";
@@ -11,13 +11,18 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/backend-api";
 type Quote = { symbol: string; price: number; change: number; change_pct: number; as_of: string };
 type LiveQuote = { type: string; item?: Quote; items?: Quote[] };
 
-export function StockDetailClient({ symbol }: { symbol: string }) {
+export function StockDetailClient({ symbol, initialStock = null }: { symbol: string; initialStock?: StockDetail | null }) {
   const [interval, setInterval] = useState<StockInterval>("daily");
-  const [stock, setStock] = useState<StockDetail | null>(null);
+  const [stock, setStock] = useState<StockDetail | null>(initialStock);
+  const initialRequestKey = useRef(initialStock ? `${symbol}:${initialStock.interval}` : null);
   const [requestError, setRequestError] = useState<{ key: string; message: string } | null>(null);
   const requestKey = `${symbol}:${interval}`;
   useEffect(() => {
     const key = `${symbol}:${interval}`;
+    if (initialRequestKey.current === key) {
+      initialRequestKey.current = null;
+      return;
+    }
     fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?interval=${interval}`, { cache: "no-store" })
       .then(async response => { if (!response.ok) throw new Error(response.status === 404 ? "지원하는 종목을 찾지 못했습니다." : "시세를 불러오지 못했습니다."); return response.json() as Promise<StockDetail>; })
       .then(value => { setStock(value); setRequestError(null); })
@@ -64,10 +69,16 @@ export function StockDetailClient({ symbol }: { symbol: string }) {
       <Metric label="시가총액" value={stock.market_cap == null ? "-" : `${(stock.market_cap / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}조`} />
       <Metric label="PER" value={stock.per == null ? "-" : `${stock.per.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}배`} />
       <Metric label="PBR" value={stock.pbr == null ? "-" : `${stock.pbr.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}배`} />
+      <Metric label="PSR" value={stock.psr == null ? "-" : `${stock.psr.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}배`} />
+      <Metric label="PCR" value={stock.pcr == null ? "-" : `${stock.pcr.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}배`} />
+      <Metric label="EV/EBITDA" value={stock.ev_ebitda == null ? "-" : `${stock.ev_ebitda.toLocaleString("ko-KR", { maximumFractionDigits: 2 })}배`} />
       <Metric label="외국인" value={stock.foreign_ownership_pct == null ? "-" : `${stock.foreign_ownership_pct.toFixed(2)}%`} />
       <Metric label="52주 최고" value={stock.high_52w == null ? "-" : `${money.format(stock.high_52w)}원`} />
       <Metric label="52주 최저" value={stock.low_52w == null ? "-" : `${money.format(stock.low_52w)}원`} />
     </section>}
+    {stock.market === "kr" && stock.valuation_source && <p className="valuation-source">
+      추가 투자지표: {stock.valuation_source} · {stock.valuation_basis}
+    </p>}
     <Section title="가격 추이"><div className="chart-toolbar">
       {(["daily", "weekly", "monthly"] as StockInterval[]).map(value => <button key={value} className={interval === value ? "active" : ""} onClick={() => setInterval(value)}>{value === "daily" ? "일봉" : value === "weekly" ? "주봉" : "월봉"}</button>)}
     </div><StockPriceChart points={stock.chart} interval={stock.interval} currency={stock.currency} /></Section>

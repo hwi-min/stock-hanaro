@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from decimal import Decimal
 
@@ -6,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.collectors.kis import kis_client
+from app.collectors.valuation import valuation_collector
 from app.core.config import settings
 from app.core.database import get_db
 from app.market_catalog import stock_catalog
@@ -53,7 +55,9 @@ async def stock_detail(symbol: str, interval: str = Query(default="daily", patte
         raise HTTPException(status_code=404, detail="stock is not in the supported catalog")
 
     if metadata["market"] == "kr":
-        quote = await kis_client.domestic_price(symbol)
+        quote, valuation = await asyncio.gather(
+            kis_client.domestic_price(symbol), valuation_collector.get(symbol)
+        )
         live = RealtimeRepository(db).latest_tick(symbol, settings.realtime_tick_max_age_seconds)
         if live:
             quote.update({"price": Decimal(str(live["price"])), "change": Decimal(str(live["change"])),
@@ -66,6 +70,7 @@ async def stock_detail(symbol: str, interval: str = Query(default="daily", patte
                        else kis_client.domestic_chart(symbol, period or "D"))
         currency = "KRW"
     else:
+        valuation = None
         row = db.scalar(select(MarketQuote).where(
             MarketQuote.market == "us", MarketQuote.symbol == symbol).order_by(MarketQuote.collected_at.desc()))
         if row:
@@ -93,6 +98,10 @@ async def stock_detail(symbol: str, interval: str = Query(default="daily", patte
         "change_pct": number(quote.get("change_pct")), "volume": number(quote.get("volume")),
         "market_cap": number(quote.get("market_cap")), "per": number(quote.get("per")),
         "pbr": number(quote.get("pbr")), "foreign_ownership_pct": number(quote.get("foreign_ownership_pct")),
+        "psr": valuation.psr if valuation else None, "pcr": valuation.pcr if valuation else None,
+        "ev_ebitda": valuation.ev_ebitda if valuation else None,
+        "valuation_basis": valuation.basis if valuation else None,
+        "valuation_source": valuation.source if valuation else None,
         "high_52w": number(quote.get("high_52w")), "low_52w": number(quote.get("low_52w")),
         "as_of": quote["as_of"].isoformat(), "basis": quote["basis"], "interval": interval,
         "session_date": chart[-1]["time"] if metadata["market"] == "us" and chart else None,

@@ -10,3 +10,4 @@ lxml==5.3.0
 pypdf==5.1.0
 pytest==8.3.3
 websockets==16.1
+truststore==0.10.4

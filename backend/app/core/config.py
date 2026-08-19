@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_version: str = "0.1.0"
     git_sha: str = "local"
+    use_system_trust_store: bool = True
     database_url: str = "sqlite:///./stock_hanaro.db"
     cors_origins: str = "http://localhost:3000"
     internal_job_secret: str = ""
@@ -29,9 +30,10 @@ class Settings(BaseSettings):
     kis_max_realtime_stocks: int = 37
     realtime_tick_max_age_seconds: int = 120
     bok_ecos_api_key: str = ""
-    openai_api_key: str = ""
-    openai_model: str = "gpt-5.6-luna"
-    openai_timeout_seconds: float = 60.0
+    solar_api_key: str = ""
+    solar_api_base_url: str = "https://api.upstage.ai/v1"
+    solar_model: str = "solar-pro3"
+    solar_timeout_seconds: float = 60.0
 
     @property
     def kis_base_url(self) -> str:
@@ -61,3 +63,8 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+if settings.use_system_trust_store:
+    import truststore
+
+    truststore.inject_into_ssl()

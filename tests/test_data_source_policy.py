@@ -35,7 +35,7 @@ class DataSourcePolicyTest(unittest.TestCase):
         source = next(item for item in self.policy["sources"] if item["id"] == "kcif")
         schedule = source["collection_schedule"]
         self.assertEqual(schedule["timezone"], "Asia/Seoul")
-        self.assertEqual(schedule["times"], ["06:00", "07:00", "07:30", "08:00", "08:30"])
+        self.assertEqual(schedule["times"], ["07:00", "07:30", "08:00", "08:30", "09:00"])
         self.assertEqual(schedule["retry_policy"], "retry_only_after_failure")
         self.assertTrue(schedule["skip_after_success_for_business_date"])
 
