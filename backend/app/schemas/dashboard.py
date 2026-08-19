@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -88,6 +88,18 @@ class KcifSummary(BaseModel):
     as_of: datetime
 
 
+class ResearchSummary(BaseModel):
+    id: int
+    category: str
+    title: str
+    broker: str
+    analyst: str | None
+    published_on: date
+    stock_code: str | None
+    stock_name: str | None
+    source_url: str
+
+
 class FreshnessItem(BaseModel):
     dataset: str
     label: str
@@ -103,4 +115,5 @@ class DashboardResponse(BaseModel):
     issues: list[IssueItem]
     disclosures: list[DisclosureItem]
     kcif: list[KcifSummary]
+    research: list[ResearchSummary]
     freshness: list[FreshnessItem]

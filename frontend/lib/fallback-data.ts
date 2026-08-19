@@ -62,5 +62,6 @@ export const fallbackDashboard: Dashboard = {
     { id: "kcif-rates", title: "미국 국채금리 방향 전환", summary: "장기 금리 하락은 성장주 가치평가 부담을 일부 낮출 수 있습니다.", topic: "금리", source_url: "https://www.kcif.or.kr/annual/newsflashList", as_of: asOf },
     { id: "kcif-oil", title: "WTI 가격 상승", summary: "지정학적 불확실성과 공급 우려가 유가에 반영되고 있습니다.", topic: "원자재", source_url: "https://www.kcif.or.kr/annual/newsflashList", as_of: asOf },
   ],
+  research: [],
   freshness: ["시장 데이터", "뉴스·이슈", "공시", "KCIF"].map((label, index) => ({ dataset: `source-${index}`, label, as_of: asOf, stale: false })),
 };

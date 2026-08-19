@@ -13,6 +13,7 @@ from app.models.kcif_report import KcifReport
 from app.models.market_quote import MarketQuote
 from app.models.news_article import NewsArticle
 from app.models.issue_summary import IssueSummary
+from app.models.research_report import ResearchReport
 
 
 METRIC_ORDER = ("SPX", "DOW30", "NASDAQ", "RUSSELL2000", "VIX", "GOLD", "KOSPI", "KOSDAQ", "KOSPI200", "USDKRW", "KTB3Y")
@@ -191,6 +192,16 @@ class DashboardRepository:
                 "as_of": aware(row.ai_summarized_at or row.collected_at),
             })
         return result
+
+    def research(self) -> list[dict]:
+        rows = self.db.scalars(select(ResearchReport).order_by(
+            desc(ResearchReport.published_on), desc(ResearchReport.id),
+        ).limit(12)).all()
+        return [{
+            "id": row.id, "category": row.category, "title": row.title, "broker": row.broker,
+            "analyst": row.analyst, "published_on": row.published_on, "stock_code": row.stock_code,
+            "stock_name": row.stock_name, "source_url": row.source_url,
+        } for row in rows]
 
     def freshness(self, now: datetime) -> list[dict]:
         specs = (

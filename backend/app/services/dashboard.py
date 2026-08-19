@@ -30,6 +30,7 @@ class DashboardService:
             "briefing": briefing, "metrics": metrics, "heatmap": self.repository.heatmap(),
             "schedules": self.repository.schedules(now), "issues": issues,
             "disclosures": self.repository.disclosures(), "kcif": self.repository.kcif(),
+            "research": self.repository.research(),
             "freshness": self.repository.freshness(now),
         }
         return DashboardResponse.model_validate(snapshot)
