@@ -19,12 +19,14 @@ from app.services.ai_summary import AISummaryService
 from app.services.rule_based_issues import RuleBasedIssueService
 from app.collectors.stock_master import stock_master_collector
 from app.repositories.stock_master import StockMasterRepository
+from app.collectors.research import research_collector
+from app.repositories.research import ResearchRepository
 
 
 SUPPORTED_JOBS = {
     "collect-calendar", "collect-disclosures", "collect-kcif", "collect-kr-snapshot",
     "collect-market", "collect-news", "collect-us-close", "summarize-content",
-    "collect-stock-master", "build-issues",
+    "collect-stock-master", "collect-research", "build-issues",
 }
 RETRY_UNTIL_SUCCESS_JOBS = {"collect-kcif", "collect-us-close"}
 
@@ -38,6 +40,7 @@ class JobService:
         self.calendar = CalendarRepository(db)
         self.kcif = KcifRepository(db)
         self.stock_master = StockMasterRepository(db)
+        self.research = ResearchRepository(db)
 
     async def execute(
         self, *, job_name: str, idempotency_key: str, business_date: date, trigger_type: str,
@@ -75,6 +78,10 @@ class JobService:
             elif job_name == "collect-stock-master":
                 items = await stock_master_collector.collect()
                 inserted, skipped = self.stock_master.replace(items)
+                errors = []
+            elif job_name == "collect-research":
+                items = await research_collector.collect()
+                inserted, skipped = self.research.upsert_many(items)
                 errors = []
             elif job_name == "collect-disclosures":
                 items = await DartClient().collect(business_date)

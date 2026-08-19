@@ -7,6 +7,7 @@ from app.api.public.dashboard import router as dashboard_router
 from app.api.public.meta import router as meta_router
 from app.api.public.market import router as market_router
 from app.api.public.stocks import router as stocks_router
+from app.api.public.research import router as research_router
 from app.core.config import settings
 from app.core.database import engine
 app = FastAPI(title=settings.app_name, version=settings.app_version)
@@ -38,4 +39,5 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(meta_router, prefix="/api")
 app.include_router(market_router, prefix="/api")
 app.include_router(stocks_router, prefix="/api")
+app.include_router(research_router, prefix="/api")
 app.include_router(jobs_router, prefix="/internal")
