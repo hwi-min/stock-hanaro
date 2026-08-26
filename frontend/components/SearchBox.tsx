@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/backend-api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 type Result = { type: "stock" | "issue"; id: string; symbol?: string; name: string; market: "kr" | "us" | null; label: string };
 
 export function SearchBox() {

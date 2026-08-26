@@ -7,9 +7,13 @@ import { StockPriceChart } from "./StockPriceChart";
 import type { StockDetail, StockInterval } from "@/lib/types";
 import { saveRecentStock } from "@/lib/recent-stocks";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/backend-api";
-type Quote = { symbol: string; price: number; change: number; change_pct: number; as_of: string };
-type LiveQuote = { type: string; item?: Quote; items?: Quote[] };
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
+function formatKst(value: string): string {
+  const date = new Date(new Date(value).getTime() + 9 * 60 * 60 * 1000);
+  const pad = (part: number) => part.toString().padStart(2, "0");
+  return `${date.getUTCFullYear()}.${pad(date.getUTCMonth() + 1)}.${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+}
 
 export function StockDetailClient({ symbol, initialStock = null }: { symbol: string; initialStock?: StockDetail | null }) {
   const [interval, setInterval] = useState<StockInterval>("daily");
@@ -32,26 +36,6 @@ export function StockDetailClient({ symbol, initialStock = null }: { symbol: str
   useEffect(() => {
     if (recentSymbol && recentName && recentMarket) saveRecentStock({ symbol: recentSymbol, name: recentName, market: recentMarket });
   }, [recentSymbol, recentName, recentMarket]);
-  useEffect(() => {
-    const source = new EventSource(`${API_BASE_URL}/api/market/stream`);
-    source.onmessage = event => {
-      try {
-        const payload = JSON.parse(event.data) as LiveQuote;
-        const quote = (payload.items ?? (payload.item ? [payload.item] : [])).find(item => item.symbol === symbol);
-        if (payload.type !== "quote" || !quote) return;
-        setStock(current => current ? { ...current, price: quote.price, change: quote.change,
-          change_pct: quote.change_pct, as_of: quote.as_of, basis: "realtime",
-          chart: current.chart.length ? current.chart.map((point, index) => index === current.chart.length - 1 ? { ...point, close: quote.price } : point) : current.chart } : current);
-      } catch { return; }
-    };
-    return () => source.close();
-  }, [symbol]);
-  useEffect(() => {
-    if (stock?.market !== "kr") return;
-    const url = `${API_BASE_URL}/api/market/subscriptions/${encodeURIComponent(symbol)}`;
-    fetch(url, { method: "POST" }).catch(() => undefined);
-    return () => { fetch(url, { method: "DELETE", keepalive: true }).catch(() => undefined); };
-  }, [stock?.market, symbol]);
   const error = requestError?.key === requestKey ? requestError.message : "";
   if (error) return <main className="detail-page"><div className="error-card">{error}</div></main>;
   if (!stock) return <main className="detail-page"><div className="loading-card">KIS 시세와 차트를 불러오는 중입니다.</div></main>;
@@ -63,7 +47,7 @@ export function StockDetailClient({ symbol, initialStock = null }: { symbol: str
       <div><span>{stock.market === "kr" ? "현재가" : "마지막 종가"}</span><strong>{stock.currency === "USD" ? "$" : "₩"}{money.format(stock.price)}</strong></div>
       <div><span>전일 대비</span><strong className={positive ? "up" : "down"}>{stock.change >= 0 ? "+" : ""}{money.format(stock.change)} · {stock.change_pct >= 0 ? "+" : ""}{stock.change_pct.toFixed(2)}%</strong></div>
       <div><span>거래량</span><strong>{stock.volume == null ? "-" : stock.volume.toLocaleString()}</strong><small>{stock.exchange}</small></div>
-      <div><span>데이터 상태</span><strong>{stock.basis === "realtime" ? "실시간" : stock.basis === "close" ? "정규장 종가" : "최근 시세"}</strong><small>{stock.session_date ? `${stock.session_date.slice(0, 4)}.${stock.session_date.slice(4, 6)}.${stock.session_date.slice(6, 8)} 기준` : new Date(stock.as_of).toLocaleString("ko-KR")}</small></div>
+      <div><span>데이터 상태</span><strong>{stock.basis === "close" ? "정규장 종가" : `${stock.market_source ?? "KRX"} 시세`}</strong><small>{stock.session_date ? `${stock.session_date.slice(0, 4)}.${stock.session_date.slice(4, 6)}.${stock.session_date.slice(6, 8)} 기준` : `${formatKst(stock.as_of)} KST · 최대 ${stock.refresh_after_seconds ?? 10}초 캐시`}</small></div>
     </section>
     {stock.market === "kr" && <section className="investment-metrics" aria-label="투자 지표">
       <Metric label="시가총액" value={stock.market_cap == null ? "-" : `${(stock.market_cap / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}조`} />

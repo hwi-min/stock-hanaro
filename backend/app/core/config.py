@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     git_sha: str = "local"
     use_system_trust_store: bool = True
     database_url: str = "sqlite:///./stock_hanaro.db"
+    db_pool_size: int = 2
+    db_max_overflow: int = 3
     cors_origins: str = "http://localhost:3000"
     internal_job_secret: str = ""
     news_collect_limit: int = 40
@@ -20,6 +22,7 @@ class Settings(BaseSettings):
     kis_app_key: str = ""
     kis_app_secret: str = ""
     kis_is_mock: bool = True
+    kis_on_demand_refresh_enabled: bool = False
     dart_api_key: str = ""
     dart_page_count: int = 100
     dart_max_pages_per_market: int = 20

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { DetailPage } from "@/components/DetailPage";
 import type { ResearchResponse } from "@/lib/types";
+import { getWorkerResearch } from "@/lib/server/research-data";
 
 const API_BASE_URL = process.env.BACKEND_API_BASE_URL
   ?? process.env.NEXT_PUBLIC_API_BASE_URL
@@ -9,6 +10,9 @@ const API_BASE_URL = process.env.BACKEND_API_BASE_URL
 type Params = { category?: string; broker?: string; q?: string };
 
 async function getResearch(params: Params): Promise<ResearchResponse> {
+  if (process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+    return getWorkerResearch({ ...params, limit: 200 });
+  }
   const query = new URLSearchParams({ limit: "200" });
   if (params.category) query.set("category", params.category);
   if (params.broker) query.set("broker", params.broker);

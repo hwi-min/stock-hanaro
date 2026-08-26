@@ -1,3 +1,4 @@
+from app.collectors import kcif
 from app.collectors.kcif import extract_pdf_text, parse_kcif_list
 
 
@@ -22,3 +23,16 @@ def test_pdf_extractor_rejects_non_pdf():
         assert "did not return a PDF" in str(exc)
     else:
         raise AssertionError("non-PDF content must be rejected")
+
+
+def test_pdf_extractor_removes_postgresql_nul_characters(monkeypatch):
+    class Page:
+        def extract_text(self):
+            return "market\x00brief"
+
+    class Reader:
+        pages = [Page()]
+
+    monkeypatch.setattr(kcif, "PdfReader", lambda _: Reader())
+
+    assert extract_pdf_text(b"%PDF-test") == "marketbrief"
