@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HeatmapItem } from "@/lib/types";
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -11,7 +11,7 @@ type SizeMode = "marketCap" | "dollarVolume" | "relativeVolume";
 
 const ROOT_RECT: Rect = { x: 0, y: 0, width: 100, height: 100 };
 
-function layoutWeighted<T>(entries: Weighted<T>[], rect: Rect): Positioned<T>[] {
+function layoutWeighted<T>(entries: Weighted<T>[], rect: Rect, aspectRatio = 1): Positioned<T>[] {
   if (!entries.length) return [];
   if (entries.length === 1) return [{ ...entries[0], rect }];
 
@@ -28,7 +28,10 @@ function layoutWeighted<T>(entries: Weighted<T>[], rect: Rect): Positioned<T>[] 
   const first = sorted.slice(0, splitAt);
   const second = sorted.slice(splitAt);
   const ratio = first.reduce((sum, entry) => sum + entry.weight, 0) / total;
-  const vertical = rect.width >= rect.height;
+  // Rect coordinates are percentages, so compare their rendered dimensions.
+  // Without the viewport ratio a wide heatmap is laid out as a square and every
+  // resulting tile is stretched horizontally by CSS.
+  const vertical = rect.width * aspectRatio >= rect.height;
   const firstRect = vertical
     ? { ...rect, width: rect.width * ratio }
     : { ...rect, height: rect.height * ratio };
@@ -36,7 +39,7 @@ function layoutWeighted<T>(entries: Weighted<T>[], rect: Rect): Positioned<T>[] 
     ? { x: rect.x + firstRect.width, y: rect.y, width: rect.width - firstRect.width, height: rect.height }
     : { x: rect.x, y: rect.y + firstRect.height, width: rect.width, height: rect.height - firstRect.height };
 
-  return [...layoutWeighted(first, firstRect), ...layoutWeighted(second, secondRect)];
+  return [...layoutWeighted(first, firstRect, aspectRatio), ...layoutWeighted(second, secondRect, aspectRatio)];
 }
 
 function heatClass(change: number) {
@@ -57,6 +60,20 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
   const [hovered, setHovered] = useState<HeatmapItem | null>(null);
   const [zoom, setZoom] = useState(1);
   const [sizeMode, setSizeMode] = useState<SizeMode>("marketCap");
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportAspect, setViewportAspect] = useState(16 / 9);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const updateAspect = () => {
+      const { width, height } = viewport.getBoundingClientRect();
+      if (width > 0 && height > 0) setViewportAspect(width / height);
+    };
+    updateAspect();
+    const observer = new ResizeObserver(updateAspect);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
   const weightOf = useCallback((item: HeatmapItem) => {
     if (sizeMode === "dollarVolume") return Math.sqrt(Math.max(item.dollar_volume ?? 0, 1));
     if (sizeMode === "relativeVolume") return Math.sqrt(Math.max(item.relative_volume ?? 0, .05));
@@ -68,15 +85,15 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
     return layoutWeighted([...grouped].map(([sector, sectorItems]) => ({
       value: { sector, items: sectorItems },
       weight: sectorItems.reduce((sum, item) => sum + weightOf(item), 0),
-    })), ROOT_RECT);
-  }, [items, weightOf]);
+    })), ROOT_RECT, viewportAspect);
+  }, [items, viewportAspect, weightOf]);
 
   return <div className={`heatmap-shell ${compact ? "compact" : "detail"}`}>
     {!compact && <div className="heatmap-toolbar">
       <p><b>시장 전체</b><span>섹터 · 산업군 · 종목</span></p>
       <div className="heatmap-controls"><label>크기 기준<select value={sizeMode} onChange={event => setSizeMode(event.target.value as SizeMode)}><option value="marketCap">지수 비중</option><option value="dollarVolume">거래대금</option><option value="relativeVolume">상대 거래량</option></select></label><button onClick={() => setZoom(value => Math.max(1, value - .25))} disabled={zoom === 1} aria-label="히트맵 축소">−</button><strong>{Math.round(zoom * 100)}%</strong><button onClick={() => setZoom(value => Math.min(2, value + .25))} disabled={zoom === 2} aria-label="히트맵 확대">＋</button></div>
     </div>}
-    <div className="heatmap-viewport" onMouseLeave={() => setHovered(null)}>
+    <div ref={viewportRef} className="heatmap-viewport" onMouseLeave={() => setHovered(null)}>
       <div className="sector-map" style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}>
         {sectors.map(group => {
           const industries = new Map<string, HeatmapItem[]>();
@@ -84,11 +101,13 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
           const industryLayout = layoutWeighted([...industries].map(([industry, industryItems]) => ({
             value: { industry, items: industryItems },
             weight: industryItems.reduce((sum, item) => sum + weightOf(item), 0),
-          })), ROOT_RECT);
+          })), ROOT_RECT, viewportAspect * group.rect.width / Math.max(group.rect.height, .01));
           return <section className="sector-group" key={group.value.sector} style={positionStyle(group.rect)}>
             <h3>{group.value.sector}</h3>
             <div className="industry-map">{industryLayout.map(industry => {
-              const stockLayout = layoutWeighted(industry.value.items.map(item => ({ value: item, weight: weightOf(item) })), ROOT_RECT);
+              const groupAspect = viewportAspect * group.rect.width / Math.max(group.rect.height, .01);
+              const industryAspect = groupAspect * industry.rect.width / Math.max(industry.rect.height, .01);
+              const stockLayout = layoutWeighted(industry.value.items.map(item => ({ value: item, weight: weightOf(item) })), ROOT_RECT, industryAspect);
               return <section className="industry-group" key={industry.value.industry} style={positionStyle(industry.rect)}>
                 <h4>{industry.value.industry}</h4>
                 <div className="industry-stocks">{stockLayout.map(({ value: item, rect }) => {
