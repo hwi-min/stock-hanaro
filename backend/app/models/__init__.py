@@ -10,5 +10,6 @@ from app.models.stock_master import StockMaster
 from app.models.research_report import ResearchReport
 from app.models.realtime import RealtimeSubscription, RealtimeWorkerState
 from app.models.api_cache import ApiCache
+from app.models.sp500 import Sp500Constituent, Sp500DailySnapshot
 
-__all__ = ["ApiCache", "Disclosure", "EconomicEvent", "IssueSummary", "KcifReport", "KisToken", "MarketQuote", "NewsArticle", "PipelineRun", "RealtimeSubscription", "RealtimeWorkerState", "ResearchReport", "StockMaster"]
+__all__ = ["ApiCache", "Disclosure", "EconomicEvent", "IssueSummary", "KcifReport", "KisToken", "MarketQuote", "NewsArticle", "PipelineRun", "RealtimeSubscription", "RealtimeWorkerState", "ResearchReport", "Sp500Constituent", "Sp500DailySnapshot", "StockMaster"]

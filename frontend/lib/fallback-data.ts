@@ -31,7 +31,7 @@ export const fallbackDashboard: Dashboard = {
     ["JNJ","Johnson & Johnson","헬스케어","제약",166.41,1.23,9], ["WMT","Walmart","필수소비재","할인점",95.38,-0.62,11],
     ["KO","Coca-Cola","필수소비재","음료",69.71,-3.96,8], ["XOM","Exxon Mobil","에너지","통합 석유·가스",113.27,0.97,11],
     ["GE","GE Aerospace","산업재","항공우주",258.21,0.90,9],
-  ].map(([symbol,name,sector,industry,price,change_pct,market_cap_weight]) => ({ symbol:String(symbol), name:String(name), sector:String(sector), industry:String(industry), price:Number(price), change_pct:Number(change_pct), market_cap_weight:Number(market_cap_weight) })),
+  ].map(([symbol,name,sector,industry,price,change_pct,market_cap_weight]) => ({ symbol:String(symbol), name:String(name), sector:String(sector), industry:String(industry), price:Number(price), change_pct:Number(change_pct), market_cap_weight:Number(market_cap_weight), volume:null, dollar_volume:null, relative_volume:null, trading_date:null })),
   schedules: [
     { id: "bls-cpi", source: "bls", country: "US", category: "물가", title: "미국 소비자물가지수(CPI)", scheduled_at: "2026-07-19T21:30:00+09:00", importance: "high", source_url: "https://www.bls.gov/schedule/news_release/cpi.htm" },
     { id: "fed-speech", source: "federal_reserve", country: "US", category: "통화정책", title: "연준 위원 연설", scheduled_at: "2026-07-19T23:00:00+09:00", importance: "high", source_url: "https://www.federalreserve.gov/newsevents/calendar.htm" },

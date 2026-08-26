@@ -21,14 +21,17 @@ from app.collectors.stock_master import stock_master_collector
 from app.repositories.stock_master import StockMasterRepository
 from app.collectors.research import research_collector
 from app.repositories.research import ResearchRepository
+from app.collectors.sp500 import sp500_master_collector
+from app.repositories.sp500 import Sp500Repository
+from app.services.sp500 import Sp500CloseService
 
 
 SUPPORTED_JOBS = {
     "collect-calendar", "collect-disclosures", "collect-kcif", "collect-kr-snapshot",
     "collect-market", "collect-news", "collect-us-close", "summarize-content",
-    "collect-stock-master", "collect-research", "build-issues",
+    "collect-stock-master", "collect-research", "collect-sp500-master", "collect-sp500-close", "build-issues",
 }
-RETRY_UNTIL_SUCCESS_JOBS = {"collect-kcif", "collect-us-close"}
+RETRY_UNTIL_SUCCESS_JOBS = {"collect-kcif", "collect-us-close", "collect-sp500-close"}
 
 
 class JobService:
@@ -41,6 +44,7 @@ class JobService:
         self.kcif = KcifRepository(db)
         self.stock_master = StockMasterRepository(db)
         self.research = ResearchRepository(db)
+        self.sp500 = Sp500Repository(db)
 
     async def execute(
         self, *, job_name: str, idempotency_key: str, business_date: date, trigger_type: str,
@@ -84,6 +88,13 @@ class JobService:
                 items = await research_collector.collect()
                 inserted, skipped = self.research.upsert_many(items)
                 errors = []
+            elif job_name == "collect-sp500-master":
+                items = await sp500_master_collector.collect()
+                inserted, skipped = self.sp500.replace_constituents(items)
+                errors = []
+            elif job_name == "collect-sp500-close":
+                items, errors = await Sp500CloseService(self.sp500, kis_client).collect()
+                inserted, skipped = self.sp500.upsert_snapshots(items)
             elif job_name == "collect-disclosures":
                 items = await DartClient().collect(business_date)
                 inserted, skipped = self.disclosures.upsert_many(items)

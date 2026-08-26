@@ -26,7 +26,7 @@ function stale(value: unknown, thresholdMs: number) {
 
 export async function getWorkerDashboard(): Promise<Dashboard> {
   const [weekStart, weekEnd] = mondayBounds();
-  const [storedQuotes, events, summaries, news, disclosures, kcif, research] = await Promise.all([
+  const [storedQuotes, events, summaries, news, disclosures, kcif, research, sp500Constituents, sp500Snapshots] = await Promise.all([
     supabaseSelect<Row>("market_quotes", { select: "*", order: "market_cap.desc.nullslast" }),
     supabaseSelect<Row>("economic_events", { select: "*", scheduled_at_utc: `gte.${weekStart}`, and: `(scheduled_at_utc.lt.${weekEnd})`, order: "scheduled_at_utc.asc" }),
     supabaseSelect<Row>("issue_summaries", { select: "*", order: "generated_at.desc", limit: 6 }),
@@ -34,6 +34,8 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
     supabaseSelect<Row>("disclosures", { select: "*", order: "receipt_date.desc,importance.desc,receipt_no.desc", limit: 30 }),
     supabaseSelect<Row>("kcif_reports", { select: "*", order: "report_date.desc", limit: 3 }),
     supabaseSelect<Row>("research_reports", { select: "*", order: "published_on.desc,id.desc", limit: 12 }),
+    supabaseSelect<Row>("sp500_constituents", { select: "*", active: "eq.true", limit: 600 }).catch(() => []),
+    supabaseSelect<Row>("sp500_daily_snapshots", { select: "*", order: "trading_date.desc,index_weight.desc", limit: 1200 }).catch(() => []),
   ]);
   const freshDomestic = process.env.KIS_APP_KEY && process.env.KIS_APP_SECRET ? await getFreshDomesticIndices() : [];
   const freshBySymbol = new Map(freshDomestic.map((row) => [row.symbol, row]));
@@ -52,14 +54,35 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
     }];
   });
 
+  const constituentBySymbol = new Map(sp500Constituents.map((row) => [String(row.symbol), row]));
+  const snapshotCounts = sp500Snapshots.reduce<Record<string, number>>((counts, row) => {
+    const value = String(row.trading_date); counts[value] = (counts[value] || 0) + 1; return counts;
+  }, {});
+  const minimumSnapshotRows = Math.max(1, Math.floor(sp500Constituents.length * .98));
+  const snapshotDate = Object.keys(snapshotCounts).sort().reverse().find((value) => snapshotCounts[value] >= minimumSnapshotRows) || null;
+  const completeSnapshots = snapshotDate ? sp500Snapshots.filter((row) => String(row.trading_date) === snapshotDate) : [];
   const equities = quotes.filter((row) => row.market === "us" && row.asset_type === "equity");
   const maxCap = Math.max(...equities.map((row) => numeric(row.market_cap) ?? 0), 1);
-  const heatmap = equities.map((row) => ({
-    symbol: String(row.symbol), name: String(row.name || row.symbol), sector: String(row.sector || "기타"),
-    industry: String(row.industry || "기타"), price: numeric(row.price) ?? 0,
-    change_pct: numeric(row.change_pct) ?? 0,
-    market_cap_weight: row.market_cap ? Math.max(1, (numeric(row.market_cap) ?? 0) / maxCap * 24) : 1,
-  }));
+  const heatmap = completeSnapshots.length >= minimumSnapshotRows
+    ? completeSnapshots.flatMap((row) => {
+      const constituent = constituentBySymbol.get(String(row.symbol));
+      if (!constituent) return [];
+      return [{
+        symbol: String(row.symbol), name: String(constituent.name || row.symbol), sector: String(constituent.sector || "Other"),
+        industry: String(constituent.industry || "Other"), price: numeric(row.close) ?? 0,
+        change_pct: numeric(row.change_pct) ?? 0, market_cap_weight: numeric(row.index_weight) ?? 0.01,
+        volume: numeric(row.volume), dollar_volume: numeric(row.dollar_volume), relative_volume: numeric(row.relative_volume),
+        trading_date: snapshotDate,
+      }];
+    })
+    : equities.map((row) => ({
+      symbol: String(row.symbol), name: String(row.name || row.symbol), sector: String(row.sector || "기타"),
+      industry: String(row.industry || "기타"), price: numeric(row.price) ?? 0,
+      change_pct: numeric(row.change_pct) ?? 0,
+      market_cap_weight: row.market_cap ? Math.max(1, (numeric(row.market_cap) ?? 0) / maxCap * 24) : 1,
+      volume: numeric(row.volume), dollar_volume: (numeric(row.price) ?? 0) * (numeric(row.volume) ?? 0) || null,
+      relative_volume: null, trading_date: null,
+    }));
 
   const newsById = new Map(news.map((row) => [Number(row.id), row]));
   const issues: IssueItem[] = summaries.flatMap((row) => {
