@@ -1,0 +1,227 @@
+import "server-only";
+
+import type { ChartPoint, StockDetail, StockInterval } from "@/lib/types";
+import { numeric, supabaseSelect, supabaseUpsert } from "./supabase-rest";
+
+type Json = Record<string, unknown>;
+type CacheRow = { cache_key: string; payload_json: string; expires_at: string; updated_at: string };
+type TokenRow = { environment: string; access_token: string; expires_at: string; issued_at: string };
+type StockMaster = { symbol: string; name: string; market: string };
+
+const inFlight = new Map<string, Promise<unknown>>();
+let memoryToken: { value: string; expiresAt: number } | null = null;
+
+function env(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
+
+function baseUrl() {
+  return process.env.KIS_IS_MOCK === "true"
+    ? "https://openapivts.koreainvestment.com:29443"
+    : "https://openapi.koreainvestment.com:9443";
+}
+
+async function token(): Promise<string> {
+  const now = Date.now();
+  if (memoryToken && now + 5 * 60000 < memoryToken.expiresAt) return memoryToken.value;
+  const environment = process.env.KIS_IS_MOCK === "true" ? "mock" : "real";
+  const rows = await supabaseSelect<TokenRow>("kis_tokens", { select: "*", environment: `eq.${environment}`, limit: 1 });
+  const cached = rows[0];
+  if (cached && now + 5 * 60000 < new Date(cached.expires_at).getTime()) {
+    memoryToken = { value: cached.access_token, expiresAt: new Date(cached.expires_at).getTime() };
+    return cached.access_token;
+  }
+  const response = await fetch(`${baseUrl()}/oauth2/tokenP`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ grant_type: "client_credentials", appkey: env("KIS_APP_KEY"), appsecret: env("KIS_APP_SECRET") }),
+  });
+  if (!response.ok) throw new Error(`KIS token failed (${response.status})`);
+  const data = await response.json() as { access_token: string; expires_in?: number };
+  const issuedAt = new Date();
+  const expiresAt = new Date(issuedAt.getTime() + Math.max((data.expires_in ?? 86400) - 600, 60) * 1000);
+  memoryToken = { value: data.access_token, expiresAt: expiresAt.getTime() };
+  await supabaseUpsert("kis_tokens", {
+    environment, access_token: data.access_token, issued_at: issuedAt.toISOString(), expires_at: expiresAt.toISOString(),
+  }, "environment");
+  return data.access_token;
+}
+
+async function kisGet(path: string, trId: string, params: Record<string, string>): Promise<Json> {
+  const query = new URLSearchParams(params);
+  const response = await fetch(`${baseUrl()}${path}?${query}`, {
+    headers: {
+      authorization: `Bearer ${await token()}`, appkey: env("KIS_APP_KEY"), appsecret: env("KIS_APP_SECRET"), tr_id: trId, custtype: "P",
+    },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`KIS ${trId} failed (${response.status})`);
+  const data = await response.json() as Json;
+  if (data.rt_cd !== undefined && data.rt_cd !== "0") throw new Error(`KIS ${trId}: ${data.msg_cd} ${data.msg1}`);
+  return data;
+}
+
+async function cached<T>(key: string, ttlSeconds: number, loader: () => Promise<T>): Promise<{ value: T; cachedAt: string; hit: boolean }> {
+  const rows = await supabaseSelect<CacheRow>("api_cache", { select: "*", cache_key: `eq.${key}`, limit: 1 });
+  const row = rows[0];
+  if (row && new Date(row.expires_at).getTime() > Date.now()) {
+    return { value: JSON.parse(row.payload_json) as T, cachedAt: row.updated_at, hit: true };
+  }
+  let pending = inFlight.get(key) as Promise<T> | undefined;
+  if (!pending) {
+    pending = loader(); inFlight.set(key, pending);
+  }
+  try {
+    const value = await pending;
+    const now = new Date();
+    await supabaseUpsert("api_cache", {
+      cache_key: key, payload_json: JSON.stringify(value), updated_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + ttlSeconds * 1000).toISOString(),
+    }, "cache_key");
+    return { value, cachedAt: now.toISOString(), hit: false };
+  } catch (error) {
+    if (row) return { value: JSON.parse(row.payload_json) as T, cachedAt: row.updated_at, hit: true };
+    throw error;
+  } finally {
+    inFlight.delete(key);
+  }
+}
+
+function kstParts(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul", weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || "0";
+  return { weekday: get("weekday"), seconds: Number(get("hour")) * 3600 + Number(get("minute")) * 60 + Number(get("second")) };
+}
+
+function marketCode() {
+  const { weekday, seconds } = kstParts();
+  if (["Sat", "Sun"].includes(weekday)) return "J";
+  return (seconds >= 8 * 3600 && seconds < 8 * 3600 + 50 * 60)
+    || (seconds >= 9 * 3600 + 30 && seconds < 15 * 3600 + 20 * 60)
+    || (seconds >= 15 * 3600 + 40 * 60 && seconds < 20 * 3600) ? "NX" : "J";
+}
+
+function quoteTtl() {
+  const { weekday, seconds } = kstParts();
+  if (["Sat", "Sun"].includes(weekday)) return 43200;
+  if (seconds >= 8 * 3600 && seconds < 8 * 3600 + 50 * 60) return 30;
+  if (seconds >= 8 * 3600 + 50 * 60 && seconds < 9 * 3600) return 60;
+  if (seconds >= 9 * 3600 && seconds < 15 * 3600 + 30 * 60) return 10;
+  if (seconds >= 15 * 3600 + 30 * 60 && seconds < 15 * 3600 + 40 * 60) return 30;
+  if (seconds >= 15 * 3600 + 40 * 60 && seconds < 20 * 3600) return 30;
+  return 43200;
+}
+
+async function domesticPrice(symbol: string, code: string) {
+  const next = code !== "J";
+  const data = await kisGet(
+    next ? "/uapi/domestic-stock/v1/quotations/inquire-price-2" : "/uapi/domestic-stock/v1/quotations/inquire-price",
+    next ? "FHPST01010000" : "FHKST01010100",
+    { FID_COND_MRKT_DIV_CODE: code, FID_INPUT_ISCD: symbol },
+  );
+  const output = (data.output || {}) as Json;
+  const price = numeric(output.stck_prpr as string);
+  if (!price || price <= 0) throw new Error(`KIS returned no domestic price for ${symbol}`);
+  return {
+    price, change: numeric(output.prdy_vrss as string), change_pct: numeric(output.prdy_ctrt as string),
+    volume: numeric(output.acml_vol as string), market_cap: numeric(output.hts_avls as string), per: numeric(output.per as string),
+    pbr: numeric(output.pbr as string), foreign_ownership_pct: numeric(output.hts_frgn_ehrt as string),
+    high_52w: numeric(output.d250_hgpr as string), low_52w: numeric(output.d250_lwpr as string),
+    name: String(output.hts_kor_isnm || ""), as_of: new Date().toISOString(), market_source: code === "NX" ? "NXT" : "KRX",
+  };
+}
+
+async function domesticIndex(symbol: string, code: string, name: string) {
+  const data = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000", {
+    FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code,
+  });
+  const output = (data.output || {}) as Json;
+  const price = numeric(output.bstp_nmix_prpr);
+  if (!price || price <= 0) throw new Error(`KIS returned no index price for ${symbol}`);
+  return {
+    provider: "kis", market: "kr", asset_type: "index", exchange: "KRX", symbol, name,
+    sector: null, industry: null, currency: "KRW", price,
+    change: numeric(output.bstp_nmix_prdy_vrss), change_pct: numeric(output.bstp_nmix_prdy_ctrt),
+    volume: numeric(output.acml_vol), market_cap: null, as_of: new Date().toISOString(), collected_at: new Date().toISOString(),
+  };
+}
+
+export async function getFreshDomesticIndices() {
+  const ttl = (() => {
+    const value = quoteTtl();
+    return value === 10 ? 30 : value;
+  })();
+  const specs = [["KOSPI", "0001", "KOSPI"], ["KOSDAQ", "1001", "KOSDAQ"], ["KOSPI200", "2001", "KOSPI 200"]] as const;
+  const results = await Promise.allSettled(specs.map(([symbol, code, name]) =>
+    cached(`kis:kr:index:${symbol}`, ttl, () => domesticIndex(symbol, code, name)).then((result) => result.value)
+  ));
+  return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+}
+
+function ymd(date: Date) { return date.toISOString().slice(0, 10).replaceAll("-", ""); }
+
+async function domesticChart(symbol: string, interval: StockInterval): Promise<ChartPoint[]> {
+  const period = interval === "weekly" ? "W" : interval === "monthly" ? "M" : "D";
+  const end = new Date();
+  const lookback = period === "D" ? 200 : period === "W" ? 1095 : 3650;
+  const start = new Date(end.getTime() - lookback * 86400000);
+  const data = await kisGet("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100", {
+    FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: symbol, FID_INPUT_DATE_1: ymd(start), FID_INPUT_DATE_2: ymd(end),
+    FID_PERIOD_DIV_CODE: period, FID_ORG_ADJ_PRC: "0",
+  });
+  const rows = ((data.output2 || []) as Json[]).slice(0, 100);
+  return rows.flatMap((row) => {
+    const close = numeric(row.stck_clpr as string); if (close === null) return [];
+    return [{ time: String(row.stck_bsop_date), open: numeric(row.stck_oprc as string), high: numeric(row.stck_hgpr as string), low: numeric(row.stck_lwpr as string), close, volume: numeric(row.acml_vol as string) }];
+  }).reverse();
+}
+
+async function valuation(symbol: string) {
+  const [invest, wise] = await Promise.allSettled([
+    fetch(`https://theinvest.co.kr/compinfo.php?cd=${symbol}`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; StockHanaro/0.1)" } }).then((r) => r.ok ? r.text() : ""),
+    fetch(`https://comp.wisereport.co.kr/company/c1010001.aspx?cmp_cd=${symbol}`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; StockHanaro/0.1)" } }).then((r) => r.ok ? r.text() : ""),
+  ]);
+  const text = (result: PromiseSettledResult<string>) => result.status === "fulfilled" ? result.value.replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ") : "";
+  const metric = (value: string, label: string) => numeric(value.match(new RegExp(`${label.replace("/", "\\/")}\\s+(-?[\\d,.]+)`, "i"))?.[1]?.replaceAll(",", ""));
+  const investText = text(invest), wiseText = text(wise);
+  const psr = metric(investText, "PSR"), pcr = metric(investText, "PCR"), ev_ebitda = metric(wiseText, "EV/EBITDA");
+  const sources = [...(psr !== null || pcr !== null ? ["더인베스트"] : []), ...(ev_ebitda !== null ? ["WiseReport"] : [])];
+  return { psr, pcr, ev_ebitda, basis: sources.length ? "최근 확정실적(TTM/연간)" : null, source: sources.join(" · ") || null };
+}
+
+export async function getWorkerStockDetail(symbolValue: string, interval: StockInterval): Promise<StockDetail | null> {
+  const symbol = symbolValue.toUpperCase();
+  const masters = await supabaseSelect<StockMaster>("stock_masters", { select: "symbol,name,market", symbol: `eq.${symbol}`, active: "eq.true", limit: 1 });
+  const master = masters[0];
+  if (!master) return null;
+  let code = marketCode();
+  const ttl = quoteTtl();
+  let quoteResult;
+  try {
+    quoteResult = await cached(`kis:kr:quote:${code}:${symbol}`, ttl, () => domesticPrice(symbol, code));
+  } catch (error) {
+    if (code !== "NX") throw error;
+    code = "J";
+    quoteResult = await cached(`kis:kr:quote:J:${symbol}`, ttl, () => domesticPrice(symbol, "J"));
+  }
+  const fundamentals = await cached(`kis:kr:fundamentals:v2:${symbol}`, 86400, () => domesticPrice(symbol, "J")).catch(() => null);
+  const valuationResult = await cached(`valuation:kr:${symbol}`, 86400, () => valuation(symbol)).catch(() => null);
+  const chartResult = await cached(`kis:kr:chart:${symbol}:${interval}`, 300, () => domesticChart(symbol, interval));
+  const quote = quoteResult.value;
+  const fundamental = fundamentals?.value;
+  const extra = valuationResult?.value;
+  return {
+    symbol, name: master.name || quote.name || symbol, market: "kr", exchange: "KRX", market_source: quote.market_source,
+    sector: master.market, industry: "국내 상장주식", currency: "KRW", price: quote.price,
+    change: quote.change ?? 0, change_pct: quote.change_pct ?? 0, volume: quote.volume,
+    market_cap: fundamental?.market_cap ?? null, per: fundamental?.per ?? null, pbr: fundamental?.pbr ?? null,
+    psr: extra?.psr ?? null, pcr: extra?.pcr ?? null, ev_ebitda: extra?.ev_ebitda ?? null,
+    valuation_basis: extra?.basis ?? null, valuation_source: extra?.source ?? null,
+    foreign_ownership_pct: fundamental?.foreign_ownership_pct ?? null, high_52w: fundamental?.high_52w ?? null, low_52w: fundamental?.low_52w ?? null,
+    as_of: quote.as_of, cached_at: quoteResult.cachedAt, cache_hit: quoteResult.hit, refresh_after_seconds: ttl,
+    session_date: null, basis: "snapshot", interval, chart: chartResult.value,
+  };
+}

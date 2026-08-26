@@ -3,11 +3,26 @@ from decimal import Decimal
 from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
+import pytest
+from sqlalchemy import delete
 
 from app.collectors.kis import kis_client
+from app.core.database import SessionLocal
 from app.main import app
+from app.models.api_cache import ApiCache
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def clear_shared_api_cache():
+    with SessionLocal() as db:
+        db.execute(delete(ApiCache))
+        db.commit()
+    yield
+    with SessionLocal() as db:
+        db.execute(delete(ApiCache))
+        db.commit()
 
 
 def test_health():

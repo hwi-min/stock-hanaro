@@ -60,6 +60,7 @@ class JobService:
             self.runs.finish(run, status=PipelineStatus.skipped, skip_count=1, error_summary="already succeeded")
             return run, True
         self.runs.start(run)
+        run_id = run.id
         try:
             if job_name == "collect-news":
                 items = await NaverFinanceNewsCollector().collect()
@@ -106,5 +107,11 @@ class JobService:
                 skip_count=skipped, error_count=len(errors), error_summary="\n".join(errors)[:2000] or None,
             )
         except Exception as exc:
-            self.runs.finish(run, status=PipelineStatus.failed, error_count=1, error_summary=str(exc)[:2000])
+            self.runs.db.rollback()
+            persisted_run = self.runs.get(run_id)
+            if persisted_run is None:
+                raise
+            self.runs.finish(
+                persisted_run, status=PipelineStatus.failed, error_count=1, error_summary=str(exc)[:2000]
+            )
         return run, True

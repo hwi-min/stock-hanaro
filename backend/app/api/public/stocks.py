@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime
 from decimal import Decimal
 
@@ -8,13 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.collectors.kis import kis_client
 from app.collectors.valuation import valuation_collector
-from app.core.config import settings
 from app.core.database import get_db
 from app.market_catalog import stock_catalog
 from app.models.market_quote import MarketQuote
 from app.repositories.dashboard import DashboardRepository
-from app.repositories.realtime import RealtimeRepository
 from app.repositories.stock_master import StockMasterRepository
+from app.services.api_cache import ApiCacheService
+from app.services.market_freshness import domestic_chart_ttl, domestic_market_code, domestic_quote_ttl
 
 router = APIRouter(tags=["stocks"])
 
@@ -55,19 +54,60 @@ async def stock_detail(symbol: str, interval: str = Query(default="daily", patte
         raise HTTPException(status_code=404, detail="stock is not in the supported catalog")
 
     if metadata["market"] == "kr":
-        quote, valuation = await asyncio.gather(
-            kis_client.domestic_price(symbol), valuation_collector.get(symbol)
+        cache = ApiCacheService(db)
+        quote_ttl = domestic_quote_ttl(surface="detail")
+        market_code = domestic_market_code()
+        try:
+            quote, quote_cached_at, quote_cache_hit = await cache.get_or_fetch(
+                f"kis:kr:quote:{market_code}:{symbol}", quote_ttl,
+                lambda: kis_client.domestic_price(symbol, market_code),
+            )
+        except Exception:
+            if market_code != "NX":
+                raise
+            market_code = "J"
+            quote, quote_cached_at, quote_cache_hit = await cache.get_or_fetch(
+                f"kis:kr:quote:J:{symbol}", quote_ttl,
+                lambda: kis_client.domestic_price(symbol, "J"),
+            )
+
+        async def fetch_fundamentals():
+            value = await kis_client.domestic_price(symbol, "J")
+            required = ("market_cap", "per", "pbr", "foreign_ownership_pct", "high_52w", "low_52w")
+            if not any(value.get(key) is not None for key in required):
+                raise RuntimeError(f"KIS returned no fundamentals for {symbol}")
+            return value
+
+        try:
+            fundamentals, _, _ = await cache.get_or_fetch(
+                f"kis:kr:fundamentals:v2:{symbol}", 24 * 60 * 60, fetch_fundamentals
+            )
+        except Exception:
+            fundamentals = {}
+        for key in ("market_cap", "per", "pbr", "foreign_ownership_pct", "high_52w", "low_52w"):
+            quote[key] = fundamentals.get(key)
+
+        async def fetch_valuation():
+            value = await valuation_collector.get(symbol)
+            return {
+                "psr": value.psr, "pcr": value.pcr, "ev_ebitda": value.ev_ebitda,
+                "basis": value.basis, "source": value.source,
+            }
+
+        valuation, _, _ = await cache.get_or_fetch(
+            f"valuation:kr:{symbol}", 24 * 60 * 60, fetch_valuation
         )
-        live = RealtimeRepository(db).latest_tick(symbol, settings.realtime_tick_max_age_seconds)
-        if live:
-            quote.update({"price": Decimal(str(live["price"])), "change": Decimal(str(live["change"])),
-                          "change_pct": Decimal(str(live["change_pct"])),
-                          "as_of": datetime.fromisoformat(live["as_of"]), "basis": "realtime"})
-        else:
-            quote["basis"] = "snapshot"
         period = {"daily": "D", "weekly": "W", "monthly": "M"}.get(interval)
-        chart = await (kis_client.domestic_minute_chart(symbol) if interval == "minute"
-                       else kis_client.domestic_chart(symbol, period or "D"))
+
+        async def fetch_chart():
+            return await (kis_client.domestic_minute_chart(symbol) if interval == "minute"
+                          else kis_client.domestic_chart(symbol, period or "D"))
+
+        chart, _, _ = await cache.get_or_fetch(
+            f"kis:kr:chart:{symbol}:{interval}", domestic_chart_ttl(), fetch_chart
+        )
+        quote["basis"] = "snapshot"
+        quote["as_of"] = datetime.fromisoformat(quote["as_of"]) if isinstance(quote.get("as_of"), str) else quote["as_of"]
         currency = "KRW"
     else:
         valuation = None
@@ -98,12 +138,16 @@ async def stock_detail(symbol: str, interval: str = Query(default="daily", patte
         "change_pct": number(quote.get("change_pct")), "volume": number(quote.get("volume")),
         "market_cap": number(quote.get("market_cap")), "per": number(quote.get("per")),
         "pbr": number(quote.get("pbr")), "foreign_ownership_pct": number(quote.get("foreign_ownership_pct")),
-        "psr": valuation.psr if valuation else None, "pcr": valuation.pcr if valuation else None,
-        "ev_ebitda": valuation.ev_ebitda if valuation else None,
-        "valuation_basis": valuation.basis if valuation else None,
-        "valuation_source": valuation.source if valuation else None,
+        "psr": valuation.get("psr") if valuation else None, "pcr": valuation.get("pcr") if valuation else None,
+        "ev_ebitda": valuation.get("ev_ebitda") if valuation else None,
+        "valuation_basis": valuation.get("basis") if valuation else None,
+        "valuation_source": valuation.get("source") if valuation else None,
         "high_52w": number(quote.get("high_52w")), "low_52w": number(quote.get("low_52w")),
         "as_of": quote["as_of"].isoformat(), "basis": quote["basis"], "interval": interval,
+        "market_source": quote.get("market_source") if metadata["market"] == "kr" else metadata["exchange"],
+        "cache_hit": quote_cache_hit if metadata["market"] == "kr" else True,
+        "cached_at": quote_cached_at.isoformat() if metadata["market"] == "kr" else quote["as_of"].isoformat(),
+        "refresh_after_seconds": quote_ttl if metadata["market"] == "kr" else None,
         "session_date": chart[-1]["time"] if metadata["market"] == "us" and chart else None,
         "chart": [{key: number(value) if isinstance(value, Decimal) else value for key, value in point.items()}
                   for point in chart],

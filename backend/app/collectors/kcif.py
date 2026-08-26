@@ -74,6 +74,9 @@ def extract_pdf_text(content: bytes) -> str:
         raise RuntimeError("KCIF download did not return a PDF")
     reader = PdfReader(io.BytesIO(content))
     text = "\n\n".join((page.extract_text() or "").strip() for page in reader.pages).strip()
+    # PDF text extraction can emit NUL characters. PostgreSQL text columns reject
+    # them, so normalize the extracted payload before it reaches persistence.
+    text = text.replace("\x00", "")
     if not text:
         raise RuntimeError("KCIF PDF contains no extractable text")
     return text

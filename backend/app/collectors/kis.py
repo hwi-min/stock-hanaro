@@ -172,10 +172,16 @@ class KISClient:
             volume=decimal_or_none(output.get("acml_vol")), market_cap=None, as_of=datetime.now(timezone.utc),
         )
 
-    async def domestic_price(self, symbol: str) -> dict:
+    async def domestic_price(self, symbol: str, market_code: str = "J") -> dict:
+        if market_code not in {"J", "NX", "UN"}:
+            raise ValueError(f"unsupported domestic market code: {market_code}")
+        if market_code == "J":
+            path, tr_id = "/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100"
+        else:
+            path, tr_id = "/uapi/domestic-stock/v1/quotations/inquire-price-2", "FHPST01010000"
         data = await self._get(
-            "/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
-            {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": symbol},
+            path, tr_id,
+            {"FID_COND_MRKT_DIV_CODE": market_code, "FID_INPUT_ISCD": symbol},
         )
         output = data.get("output", {})
         price = decimal_or_none(output.get("stck_prpr"))
@@ -191,6 +197,7 @@ class KISClient:
             "high_52w": decimal_or_none(output.get("d250_hgpr")),
             "low_52w": decimal_or_none(output.get("d250_lwpr")),
             "name": output.get("hts_kor_isnm"), "as_of": datetime.now(timezone.utc),
+            "market_source": "NXT" if market_code == "NX" else "UNIFIED" if market_code == "UN" else "KRX",
         }
 
     async def domestic_chart(self, symbol: str, period: str = "D", days: int = 100) -> list[dict]:

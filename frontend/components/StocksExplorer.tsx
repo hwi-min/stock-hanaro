@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { clearRecentStocks, loadRecentStocks, saveRecentStock, type RecentStock } from "@/lib/recent-stocks";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/backend-api";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 type SearchResult = { type: "stock" | "issue"; id: string; symbol?: string; name: string; market: "kr" | "us" | null; label: string };
 
 const featured: RecentStock[] = [
