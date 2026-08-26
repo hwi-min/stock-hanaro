@@ -36,7 +36,7 @@ Valuation metadata is cached for 24 hours.
    alembic upgrade head
    ```
 
-6. Confirm that revision `20260826_0014` is at Alembic head.
+6. Confirm that revision `20260826_0016` is at Alembic head.
 
 Use the pooler URI for serverless functions and scheduled jobs. Never expose the database password,
 KIS keys, DART key, Solar key, or Supabase service-role key through a `NEXT_PUBLIC_` variable.
@@ -55,10 +55,10 @@ Worker runtime and must never use a `NEXT_PUBLIC_` prefix. The database migratio
 `service_role` read access to dashboard tables and narrowly scoped write access to `api_cache`,
 `kis_tokens`, and `disclosures`; it does not grant Data API access to `anon` or `authenticated`.
 
-The disclosure page checks a shared Supabase cache on every request. During weekday filing hours
-(07:30-19:10 KST), a stale cache is refreshed from OpenDART at most once every three minutes.
-Outside filing hours it uses a 30-minute TTL, and on weekends a six-hour TTL. Refresh failures keep
-serving the last stored disclosures and retry after 30 seconds.
+The disclosure page checks a shared Supabase cache on every request. If the last OpenDART check is
+more than two minutes old, one request refreshes the shared cache and upserts only unseen receipt
+numbers. Refresh failures keep serving the last stored disclosures and retry after two minutes.
+The same refresh removes disclosure rows older than the current and previous KST calendar dates.
 
 ## Cloudflare frontend migration prerequisite
 

@@ -51,6 +51,22 @@ export async function supabaseUpsert<T extends Record<string, unknown>>(
   if (!response.ok) throw new Error(`Supabase ${table} upsert failed (${response.status}): ${await response.text()}`);
 }
 
+export async function supabaseDelete(
+  table: string,
+  query: Record<string, QueryValue>,
+): Promise<void> {
+  const { url, key } = config();
+  const params = new URLSearchParams();
+  for (const [name, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== "") params.set(name, String(value));
+  }
+  const response = await fetch(`${url}/rest/v1/${table}?${params}`, {
+    method: "DELETE",
+    headers: headers(key),
+  });
+  if (!response.ok) throw new Error(`Supabase ${table} delete failed (${response.status}): ${await response.text()}`);
+}
+
 export function numeric(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);

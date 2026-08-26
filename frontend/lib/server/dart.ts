@@ -1,7 +1,7 @@
 import "server-only";
 
 import { classifyDisclosure, disclosureTypeLabels, isCorrectionTitle } from "../disclosure-classification";
-import { supabaseSelect, supabaseUpsert } from "./supabase-rest";
+import { supabaseDelete, supabaseSelect, supabaseUpsert } from "./supabase-rest";
 
 type CacheRow = { payload_json: string; expires_at: string; updated_at: string };
 type StoredDisclosure = { receipt_no: string; corp_cls: string };
@@ -21,6 +21,8 @@ export type DisclosureRefresh = {
 };
 
 const CACHE_KEY = "dart:disclosures:latest";
+const REFRESH_SECONDS = 120;
+const MAX_PAGES = 20;
 let refreshPromise: Promise<DisclosureRefresh> | null = null;
 
 function kstParts(now = new Date()) {
@@ -31,10 +33,13 @@ function kstParts(now = new Date()) {
   return { date: `${parts.year}${parts.month}${parts.day}`, weekday: parts.weekday, minutes: Number(parts.hour) * 60 + Number(parts.minute) };
 }
 
-function ttlSeconds() {
-  const { weekday, minutes } = kstParts();
-  if (weekday === "Sat" || weekday === "Sun") return 6 * 3600;
-  return minutes >= 7 * 60 + 30 && minutes <= 19 * 60 + 10 ? 180 : 1800;
+function retentionCutoff(now = new Date()) {
+  const { date } = kstParts(now);
+  const kstMidnightUtc = new Date(`${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T00:00:00+09:00`);
+  kstMidnightUtc.setUTCDate(kstMidnightUtc.getUTCDate() - 1);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(kstMidnightUtc);
 }
 
 function inferReportType(title: string, remarks = "") {
@@ -88,42 +93,46 @@ async function writeStatus(status: DisclosureRefresh, seconds: number) {
   }, "cache_key");
 }
 
-async function fetchMarket(market: "Y" | "K" | "N", date: string, known: Set<string>) {
+async function fetchLatest(date: string, known: Set<string>) {
   const found: DartRow[] = [];
-  for (let page = 1; page <= 20; page += 1) {
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
     const params = new URLSearchParams({ crtfc_key: process.env.DART_API_KEY || "", bgn_de: date, end_de: date,
-      corp_cls: market, sort: "date", sort_mth: "desc", page_no: String(page), page_count: "100" });
+      sort: "date", sort_mth: "desc", page_no: String(page), page_count: "100" });
     const response = await fetch(`https://opendart.fss.or.kr/api/list.json?${params}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`OpenDART HTTP ${response.status}`);
     const data = await response.json() as DartResponse;
     if (data.status === "013") return found;
     if (data.status !== "000") throw new Error(`OpenDART ${data.status}: ${data.message || "request failed"}`);
-    const items = data.list || [];
+    const items = (data.list || []).filter((item) => ["Y", "K", "N"].includes(String(item.corp_cls || "")));
     const existingIndex = items.findIndex((item) => known.has(String(item.rcept_no || "")));
     found.push(...(existingIndex >= 0 ? items.slice(0, existingIndex) : items));
     if (existingIndex >= 0 || page >= Number(data.total_page || 1)) return found;
   }
-  throw new Error(`OpenDART pagination limit exceeded for ${market}`);
+  throw new Error("OpenDART pagination limit exceeded");
 }
 
 async function refresh(previous: DisclosureRefresh | null): Promise<DisclosureRefresh> {
-  const now = new Date(), ttl = ttlSeconds();
-  if (!process.env.DART_API_KEY) return { status: "disabled", checkedAt: null, lastSuccessAt: previous?.lastSuccessAt || null, newCount: 0, retryAfterSeconds: ttl };
+  const now = new Date();
+  if (!process.env.DART_API_KEY) return { status: "disabled", checkedAt: null, lastSuccessAt: previous?.lastSuccessAt || null, newCount: 0, retryAfterSeconds: REFRESH_SECONDS };
   try {
+    // Claim the shared refresh window before calling OpenDART so other isolates serve stored data.
+    await writeStatus({ status: "fresh", checkedAt: now.toISOString(), lastSuccessAt: previous?.lastSuccessAt || null,
+      newCount: 0, retryAfterSeconds: REFRESH_SECONDS }, REFRESH_SECONDS);
     const { date } = kstParts(now);
     const isoDate = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`;
     const stored = await supabaseSelect<StoredDisclosure>("disclosures", { select: "receipt_no,corp_cls", receipt_date: `eq.${isoDate}`, limit: 1000 });
     const known = new Set(stored.map((item) => item.receipt_no));
-    const markets = await Promise.all(["Y", "K", "N"].map((market) => fetchMarket(market as "Y" | "K" | "N", date, known)));
-    const unique = [...new Map(markets.flat().filter((item) => item.rcept_no).map((item) => [item.rcept_no, item])).values()];
+    const latest = await fetchLatest(date, known);
+    const unique = [...new Map(latest.filter((item) => item.rcept_no && !known.has(String(item.rcept_no))).map((item) => [item.rcept_no, item])).values()];
     if (unique.length) await supabaseUpsert("disclosures", unique.map(normalize), "receipt_no");
-    const result: DisclosureRefresh = { status: "refreshed", checkedAt: now.toISOString(), lastSuccessAt: now.toISOString(), newCount: unique.length, retryAfterSeconds: ttl };
-    await writeStatus(result, ttl);
+    await supabaseDelete("disclosures", { receipt_date: `lt.${retentionCutoff(now)}` });
+    const result: DisclosureRefresh = { status: "refreshed", checkedAt: now.toISOString(), lastSuccessAt: now.toISOString(), newCount: unique.length, retryAfterSeconds: REFRESH_SECONDS };
+    await writeStatus(result, REFRESH_SECONDS);
     return result;
   } catch (error) {
     const result: DisclosureRefresh = { status: "failed", checkedAt: now.toISOString(), lastSuccessAt: previous?.lastSuccessAt || null,
-      newCount: 0, retryAfterSeconds: 30, message: error instanceof Error ? error.message.slice(0, 180) : "OpenDART refresh failed" };
-    await writeStatus(result, 30).catch(() => undefined);
+      newCount: 0, retryAfterSeconds: REFRESH_SECONDS, message: error instanceof Error ? error.message.slice(0, 180) : "OpenDART refresh failed" };
+    await writeStatus(result, REFRESH_SECONDS).catch(() => undefined);
     return result;
   }
 }
@@ -132,7 +141,7 @@ export async function refreshDisclosuresIfStale(): Promise<DisclosureRefresh> {
   const row = await cacheRow();
   const previous = parseStatus(row);
   if (row && Date.now() < new Date(row.expires_at).getTime()) return { ...(previous || {
-    status: "fresh", checkedAt: row.updated_at, lastSuccessAt: row.updated_at, newCount: 0, retryAfterSeconds: ttlSeconds(),
+    status: "fresh", checkedAt: row.updated_at, lastSuccessAt: row.updated_at, newCount: 0, retryAfterSeconds: REFRESH_SECONDS,
   }), status: previous?.status === "failed" ? "failed" : "fresh" };
   if (!refreshPromise) refreshPromise = refresh(previous).finally(() => { refreshPromise = null; });
   return refreshPromise;
