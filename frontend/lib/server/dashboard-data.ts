@@ -34,8 +34,8 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
     supabaseSelect<Row>("disclosures", { select: "*", order: "receipt_date.desc,importance.desc,receipt_no.desc", limit: 30 }),
     supabaseSelect<Row>("kcif_reports", { select: "*", order: "report_date.desc", limit: 3 }),
     supabaseSelect<Row>("research_reports", { select: "*", order: "published_on.desc,id.desc", limit: 12 }),
-    supabaseSelect<Row>("sp500_constituents", { select: "*", active: "eq.true", limit: 600 }),
-    supabaseSelect<Row>("sp500_daily_snapshots", { select: "*", order: "trading_date.desc,index_weight.desc", limit: 1200 }),
+    supabaseSelect<Row>("sp500_constituents", { select: "*", active: "eq.true", limit: 600 }).catch(() => []),
+    supabaseSelect<Row>("sp500_daily_snapshots", { select: "*", order: "trading_date.desc,index_weight.desc", limit: 1200 }).catch(() => []),
   ]);
   const freshDomestic = process.env.KIS_APP_KEY && process.env.KIS_APP_SECRET ? await getFreshDomesticIndices() : [];
   const freshBySymbol = new Map(freshDomestic.map((row) => [row.symbol, row]));
