@@ -34,7 +34,7 @@ export async function supabaseSelect<T>(
 
 export async function supabaseUpsert<T extends Record<string, unknown>>(
   table: string,
-  value: T,
+  value: T | T[],
   onConflict?: string,
 ): Promise<void> {
   const { url, key } = config();

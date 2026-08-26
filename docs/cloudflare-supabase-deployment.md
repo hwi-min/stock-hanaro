@@ -43,7 +43,7 @@ KIS keys, DART key, Solar key, or Supabase service-role key through a `NEXT_PUBL
 
 ## Required production secrets
 
-- Cloudflare Worker: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KIS_APP_KEY`, `KIS_APP_SECRET`
+- Cloudflare Worker: `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KIS_APP_KEY`, `KIS_APP_SECRET`, `DART_API_KEY`
 - GitHub Actions: `SUPABASE_DATABASE_URL`, `KIS_APP_KEY`, `KIS_APP_SECRET`, `DART_API_KEY`,
   `BOK_ECOS_API_KEY`, `SOLAR_API_KEY`
 
@@ -52,8 +52,13 @@ Set `KIS_IS_MOCK=false`, `KIS_ON_DEMAND_REFRESH_ENABLED=true`, and
 
 `SUPABASE_SECRET_KEY` must be a dedicated `sb_secret_...` server key. It is read only by the
 Worker runtime and must never use a `NEXT_PUBLIC_` prefix. The database migration grants
-`service_role` read access to dashboard tables and write access only to `api_cache` and
-`kis_tokens`; it does not grant Data API access to `anon` or `authenticated`.
+`service_role` read access to dashboard tables and narrowly scoped write access to `api_cache`,
+`kis_tokens`, and `disclosures`; it does not grant Data API access to `anon` or `authenticated`.
+
+The disclosure page checks a shared Supabase cache on every request. During weekday filing hours
+(07:30-19:10 KST), a stale cache is refreshed from OpenDART at most once every three minutes.
+Outside filing hours it uses a 30-minute TTL, and on weekends a six-hour TTL. Refresh failures keep
+serving the last stored disclosures and retry after 30 seconds.
 
 ## Cloudflare frontend migration prerequisite
 
@@ -76,7 +81,7 @@ uses Cloudflare Workers Builds connected to GitHub:
 - deploy command: `npm run deploy:vinext`
 - Worker name: `stock-hanaro-frontend`
 
-Add the four Worker secrets in **Workers & Pages > stock-hanaro-frontend > Settings > Variables and Secrets**.
+Add the five Worker secrets in **Workers & Pages > stock-hanaro-frontend > Settings > Variables and Secrets**.
 Add the collector secrets in **GitHub > Settings > Secrets and variables > Actions**. The
 `collect-supabase-production.yml` workflow runs morning, closing, and weekly stock-master batches directly
 against the Supabase transaction pooler, so no permanently running FastAPI server is required.
