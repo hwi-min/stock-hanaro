@@ -10,6 +10,9 @@ type Positioned<T> = Weighted<T> & { rect: Rect };
 type SizeMode = "marketCap" | "dollarVolume" | "relativeVolume";
 
 const ROOT_RECT: Rect = { x: 0, y: 0, width: 100, height: 100 };
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3;
+const ZOOM_STEP = .25;
 
 function layoutWeighted<T>(entries: Weighted<T>[], rect: Rect, aspectRatio = 1): Positioned<T>[] {
   if (!entries.length) return [];
@@ -58,7 +61,9 @@ function positionStyle(rect: Rect) {
 
 export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]; compact?: boolean }) {
   const [hovered, setHovered] = useState<HeatmapItem | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const initialZoom = compact ? 1 : 1.5;
+  const [zoom, setZoom] = useState(initialZoom);
+  const zoomRef = useRef(initialZoom);
   const [sizeMode, setSizeMode] = useState<SizeMode>("marketCap");
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportAspect, setViewportAspect] = useState(16 / 9);
@@ -73,6 +78,35 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
     const observer = new ResizeObserver(updateAspect);
     observer.observe(viewport);
     return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || compact) return;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const previous = zoomRef.current;
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, previous + (event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)));
+      if (next === previous) return;
+      const bounds = viewport.getBoundingClientRect();
+      const localX = event.clientX - bounds.left;
+      const localY = event.clientY - bounds.top;
+      const contentX = viewport.scrollLeft + localX;
+      const contentY = viewport.scrollTop + localY;
+      zoomRef.current = next;
+      setZoom(next);
+      requestAnimationFrame(() => {
+        const scale = next / previous;
+        viewport.scrollLeft = contentX * scale - localX;
+        viewport.scrollTop = contentY * scale - localY;
+      });
+    };
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", handleWheel);
+  }, [compact]);
+  const changeZoom = useCallback((next: number) => {
+    const value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, next));
+    zoomRef.current = value;
+    setZoom(value);
   }, []);
   const weightOf = useCallback((item: HeatmapItem) => {
     if (sizeMode === "dollarVolume") return Math.sqrt(Math.max(item.dollar_volume ?? 0, 1));
@@ -91,7 +125,7 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
   return <div className={`heatmap-shell ${compact ? "compact" : "detail"}`}>
     {!compact && <div className="heatmap-toolbar">
       <p><b>시장 전체</b><span>섹터 · 산업군 · 종목</span></p>
-      <div className="heatmap-controls"><label>크기 기준<select value={sizeMode} onChange={event => setSizeMode(event.target.value as SizeMode)}><option value="marketCap">지수 비중</option><option value="dollarVolume">거래대금</option><option value="relativeVolume">상대 거래량</option></select></label><button onClick={() => setZoom(value => Math.max(1, value - .25))} disabled={zoom === 1} aria-label="히트맵 축소">−</button><strong>{Math.round(zoom * 100)}%</strong><button onClick={() => setZoom(value => Math.min(2, value + .25))} disabled={zoom === 2} aria-label="히트맵 확대">＋</button></div>
+      <div className="heatmap-controls"><label>크기 기준<select value={sizeMode} onChange={event => setSizeMode(event.target.value as SizeMode)}><option value="marketCap">지수 비중</option><option value="dollarVolume">거래대금</option><option value="relativeVolume">상대 거래량</option></select></label><button onClick={() => changeZoom(zoom - ZOOM_STEP)} disabled={zoom === MIN_ZOOM} aria-label="히트맵 축소">−</button><strong title="히트맵 위에서 마우스 휠로 확대·축소">{Math.round(zoom * 100)}%</strong><button onClick={() => changeZoom(zoom + ZOOM_STEP)} disabled={zoom === MAX_ZOOM} aria-label="히트맵 확대">＋</button></div>
     </div>}
     <div ref={viewportRef} className="heatmap-viewport" onMouseLeave={() => setHovered(null)}>
       <div className="sector-map" style={{ width: `${zoom * 100}%`, height: `${zoom * 100}%` }}>
