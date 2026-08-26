@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { HeatmapItem } from "@/lib/types";
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -13,6 +13,9 @@ const ROOT_RECT: Rect = { x: 0, y: 0, width: 100, height: 100 };
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = .25;
+const TOOLTIP_WIDTH = 340;
+const TOOLTIP_HEIGHT = 190;
+const TOOLTIP_GAP = 14;
 
 function layoutWeighted<T>(entries: Weighted<T>[], rect: Rect, aspectRatio = 1): Positioned<T>[] {
   if (!entries.length) return [];
@@ -61,6 +64,7 @@ function positionStyle(rect: Rect) {
 
 export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]; compact?: boolean }) {
   const [hovered, setHovered] = useState<HeatmapItem | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const initialZoom = compact ? 1 : 1.5;
   const [zoom, setZoom] = useState(initialZoom);
   const zoomRef = useRef(initialZoom);
@@ -108,6 +112,18 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
     zoomRef.current = value;
     setZoom(value);
   }, []);
+  const showTooltip = useCallback((item: HeatmapItem, event: ReactMouseEvent<HTMLElement>) => {
+    const right = event.clientX + TOOLTIP_GAP;
+    const x = right + TOOLTIP_WIDTH <= window.innerWidth - 12
+      ? right
+      : Math.max(12, event.clientX - TOOLTIP_WIDTH - TOOLTIP_GAP);
+    const y = Math.min(
+      Math.max(12, event.clientY - 42),
+      Math.max(12, window.innerHeight - TOOLTIP_HEIGHT - 12),
+    );
+    setTooltipPosition({ x, y });
+    setHovered(item);
+  }, []);
   const weightOf = useCallback((item: HeatmapItem) => {
     if (sizeMode === "dollarVolume") return Math.sqrt(Math.max(item.dollar_volume ?? 0, 1));
     if (sizeMode === "relativeVolume") return Math.sqrt(Math.max(item.relative_volume ?? 0, .05));
@@ -148,8 +164,7 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
                   const area = rect.width * rect.height;
                   return <Link href={`/stocks/${encodeURIComponent(item.symbol)}`} key={item.symbol}
                     className={`heat-stock ${heatClass(item.change_pct)} ${area < 650 ? "small" : "large"}`}
-                    style={positionStyle(rect)} onMouseEnter={() => setHovered(item)}
-                    title={`${item.name} · ${item.change_pct > 0 ? "+" : ""}${item.change_pct.toFixed(2)}%`}
+                    style={positionStyle(rect)} onMouseEnter={event => showTooltip(item, event)}
                     aria-label={`${item.name} ${item.change_pct}%`}>
                     <strong>{item.symbol}</strong><span>{item.change_pct > 0 ? "+" : ""}{item.change_pct.toFixed(2)}%</span>
                   </Link>;
@@ -159,7 +174,7 @@ export function MarketHeatmap({ items, compact = false }: { items: HeatmapItem[]
           </section>;
         })}
       </div>
-      {hovered && <aside className="heat-tooltip" aria-live="polite">
+      {hovered && <aside className="heat-tooltip" style={{ left: tooltipPosition.x, top: tooltipPosition.y }} aria-live="polite">
         <div><span>{hovered.sector} · {hovered.industry}</span><b>{hovered.symbol}</b><small>{hovered.name}</small></div>
         <div className="tooltip-price"><strong>${hovered.price.toLocaleString("en-US", { minimumFractionDigits: 2 })}</strong><em className={hovered.change_pct >= 0 ? "up" : "down"}>{hovered.change_pct > 0 ? "+" : ""}{hovered.change_pct.toFixed(2)}%</em></div>
         <p>{hovered.trading_date ? `${hovered.trading_date} 정규장 종가` : "최근 수집 시세"} · 거래량 {(hovered.volume ?? 0).toLocaleString("en-US")}</p>
