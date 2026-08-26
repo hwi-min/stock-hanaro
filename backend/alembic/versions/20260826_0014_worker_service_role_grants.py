@@ -21,6 +21,8 @@ READ_TABLES = (
 
 
 def upgrade() -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
     for table in READ_TABLES:
         op.execute(f'GRANT SELECT ON TABLE public."{table}" TO service_role')
     op.execute("GRANT INSERT, UPDATE ON TABLE public.api_cache TO service_role")
@@ -28,6 +30,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    if op.get_bind().dialect.name != "postgresql":
+        return
     op.execute("REVOKE INSERT, UPDATE ON TABLE public.kis_tokens FROM service_role")
     op.execute("REVOKE INSERT, UPDATE ON TABLE public.api_cache FROM service_role")
     for table in READ_TABLES:
