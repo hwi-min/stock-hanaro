@@ -242,6 +242,31 @@ class KISClient:
             "high": decimal_or_none(row.get("high")), "low": decimal_or_none(row.get("low")),
             "close": decimal_or_none(row.get("clos")), "volume": decimal_or_none(row.get("tvol")),
         } for row in data.get("output2", []) if decimal_or_none(row.get("clos")) is not None]))
+
+    async def overseas_regular_close(self, symbol: str, exchange: str, target_date: date) -> dict:
+        """Return the latest regular-session close at or before target_date.
+
+        KIS keeps the newest daily candle moving during extended hours. The 16:00 ET
+        five-minute candle opens at the official closing-auction price, so use that
+        value and sum regular-session bars for the heatmap snapshot.
+        """
+        data = await self._get(
+            "/uapi/overseas-price/v1/quotations/inquire-time-itemchartprice", "HHDFS76950200",
+            {"AUTH": "", "EXCD": exchange, "SYMB": symbol, "NMIN": "5", "PINC": "1",
+             "NEXT": "1", "NREC": "120", "FILL": "", "KEYB": f"{target_date:%Y%m%d}160000"},
+        )
+        rows = data.get("output2", [])
+        closing_rows = [row for row in rows if row.get("xhms") == "160000" and str(row.get("xymd", "")) <= f"{target_date:%Y%m%d}"]
+        if not closing_rows:
+            raise RuntimeError(f"KIS returned no regular close for {exchange}:{symbol}")
+        trading_day = max(str(row["xymd"]) for row in closing_rows)
+        close_row = next(row for row in closing_rows if str(row["xymd"]) == trading_day)
+        regular_rows = [row for row in rows if str(row.get("xymd")) == trading_day and "093000" <= str(row.get("xhms")) <= "160000"]
+        close = decimal_or_none(close_row.get("open"))
+        if close is None or close <= 0:
+            raise RuntimeError(f"KIS returned invalid regular close for {exchange}:{symbol}")
+        volume_values = [decimal_or_none(row.get("evol")) for row in regular_rows]
+        return {"time": trading_day, "close": close, "volume": sum((value for value in volume_values if value is not None), Decimal(0))}
     async def overseas_index(self, symbol: str, code: str, name: str) -> QuotePayload:
         data = await self._get(
             "/uapi/overseas-price/v1/quotations/inquire-time-indexchartprice", "FHKST03030200",

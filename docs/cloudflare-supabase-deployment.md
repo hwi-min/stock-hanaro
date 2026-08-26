@@ -36,7 +36,7 @@ Valuation metadata is cached for 24 hours.
    alembic upgrade head
    ```
 
-6. Confirm that revision `20260826_0016` is at Alembic head.
+6. Confirm that revision `20260826_0017` is at Alembic head.
 
 Use the pooler URI for serverless functions and scheduled jobs. Never expose the database password,
 KIS keys, DART key, Solar key, or Supabase service-role key through a `NEXT_PUBLIC_` variable.
@@ -59,6 +59,19 @@ The disclosure page checks a shared Supabase cache on every request. If the last
 more than two minutes old, one request refreshes the shared cache and upserts only unseen receipt
 numbers. Refresh failures keep serving the last stored disclosures and retry after two minutes.
 The same refresh removes disclosure rows older than the current and previous KST calendar dates.
+
+## S&P 500 closing heatmap
+
+- The active universe and index-like portfolio weights come from the official IVV holdings CSV.
+- Sector and industry taxonomy is supplemented from the public S&P 500 constituent table.
+- KIS five-minute bars provide the 16:00 ET regular-session closing auction price and session volume.
+- KIS daily bars provide the previous close and the trailing 20-session average volume.
+- Closing snapshots run at 07:10, 07:25, and 07:40 KST Tuesday-Saturday. Later runs request only
+  missing symbols and skip automatically when the first run completed successfully.
+- The IVV constituent master refreshes at 09:00 KST Saturday. Run `collect-sp500-master` manually
+  once immediately after deploying the migration, then run `collect-sp500-close` to seed the first snapshot.
+- Daily snapshots are retained for 90 calendar days. The Worker only serves the newest date whose
+  row count covers at least 98% of the active universe.
 
 ## Cloudflare frontend migration prerequisite
 
