@@ -13,9 +13,6 @@ on:
     - cron: "10 23 * * 0-4" # 08:10 KST, Monday-Friday
     - cron: "50 6 * * 1-5"  # 15:50 KST, Monday-Friday
     - cron: "30 20 * * 0"   # 05:30 KST, Monday stock master
-    - cron: "10 22 * * 1-5" # 07:10 KST, Tuesday-Saturday S&P 500 close
-    - cron: "25 22 * * 1-5" # 07:25 KST, retry missing S&P 500 closes
-    - cron: "40 22 * * 1-5" # 07:40 KST, final retry for missing closes
     - cron: "0 0 * * 6"     # 09:00 KST, Saturday S&P 500 constituent master
 
 permissions:
@@ -93,4 +90,4 @@ jobs:
         run: python -m app.workers.run_job collect-sp500-master --slot "gha-${GITHUB_RUN_ID}-sp500-master"
       - name: Collect S&P 500 closing snapshot
         if: steps.batch.outputs.batch == 'sp500-close'
-        run: python -m app.workers.run_job collect-sp500-close --slot "gha-${GITHUB_RUN_ID}-${{ github.event.schedule || 'manual' }}"
+        run: python -m app.workers.run_job collect-sp500-close --require-complete --slot "gha-${GITHUB_RUN_ID}-${{ github.event.schedule || 'manual' }}"
