@@ -27,7 +27,15 @@ async def main() -> int:
             job_name=args.job_name, idempotency_key=key, business_date=business_date,
             trigger_type="kubernetes-cronjob",
         )
-        print(f"{run.job_name}: {run.status} ({run.id})", flush=True)
+        print(
+            f"{run.job_name}: {run.status} ({run.id}) "
+            f"input={run.input_count} success={run.success_count} "
+            f"skipped={run.skip_count} failed={run.error_count}",
+            flush=True,
+        )
+        if run.error_summary:
+            print("persisted error summary:", flush=True)
+            print(run.error_summary, flush=True)
         value = run.status.value if hasattr(run.status, "value") else str(run.status)
         successful = {"succeeded", "skipped"} if args.require_complete else {"succeeded", "skipped", "partial"}
         return 0 if value in successful else 1
