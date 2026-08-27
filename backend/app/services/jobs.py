@@ -112,12 +112,17 @@ class JobService:
             else:
                 summarized = await AISummaryService(self.runs.db).run()
                 inserted, skipped, items, errors = summarized, 0, [None] * summarized, []
+            if errors:
+                print(f"{job_name}: {len(errors)} collection error(s)", flush=True)
+                for index, error in enumerate(errors, start=1):
+                    print(f"  [{index}/{len(errors)}] {error}", flush=True)
             final_status = PipelineStatus.partial if errors and items else PipelineStatus.failed if errors else PipelineStatus.succeeded
             self.runs.finish(
                 run, status=final_status, input_count=len(items) + len(errors), success_count=inserted,
                 skip_count=skipped, error_count=len(errors), error_summary="\n".join(errors)[:2000] or None,
             )
         except Exception as exc:
+            print(f"{job_name}: fatal collection error: {exc}", flush=True)
             self.runs.db.rollback()
             persisted_run = self.runs.get(run_id)
             if persisted_run is None:
