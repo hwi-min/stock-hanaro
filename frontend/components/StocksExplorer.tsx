@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { clearRecentStocks, loadRecentStocks, saveRecentStock, type RecentStock } from "@/lib/recent-stocks";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 type SearchResult = { type: "stock" | "issue"; id: string; symbol?: string; name: string; market: "kr" | "us" | null; label: string };
 
 const featured: RecentStock[] = [
@@ -14,6 +13,10 @@ const featured: RecentStock[] = [
   { symbol: "005380", name: "현대차", market: "kr" },
   { symbol: "051910", name: "LG화학", market: "kr" },
   { symbol: "373220", name: "LG에너지솔루션", market: "kr" },
+  { symbol: "AAPL", name: "Apple", market: "us" },
+  { symbol: "MSFT", name: "Microsoft", market: "us" },
+  { symbol: "NVDA", name: "NVIDIA", market: "us" },
+  { symbol: "TSLA", name: "Tesla", market: "us" },
 ];
 
 export function StocksExplorer() {
@@ -34,7 +37,7 @@ export function StocksExplorer() {
     if (!term) return;
     timer.current = setTimeout(async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/search?q=${encodeURIComponent(term)}`, { cache: "no-store" });
+        const response = await fetch(`/api/search?q=${encodeURIComponent(term)}`, { cache: "no-store" });
         const data = response.ok ? await response.json() as { items: SearchResult[] } : { items: [] };
         setResults(data.items.filter(item => item.type === "stock"));
       } catch {
@@ -55,12 +58,12 @@ export function StocksExplorer() {
   const remember = (stock: RecentStock) => setRecent(saveRecentStock(stock));
   return <>
     <section className="stock-search-panel">
-      <label htmlFor="stock-page-search">국내 종목 검색</label>
+      <label htmlFor="stock-page-search">한국·미국 종목 검색</label>
       <div><input id="stock-page-search" autoComplete="off" autoFocus value={query}
-        onChange={event => updateQuery(event.currentTarget.value)} placeholder="기업명 또는 6자리 종목코드 입력" />
-        <span>{loading ? "검색 중" : "KOSPI · KOSDAQ 보통주"}</span></div>
+        onChange={event => updateQuery(event.currentTarget.value)} placeholder="기업명, 국내 종목코드 또는 미국 티커 입력" />
+        <span>{loading ? "검색 중" : "KRX · NASDAQ · NYSE · AMEX"}</span></div>
       {query.trim() && <div className="stock-search-results" aria-live="polite">
-        {results.map(item => <Link href={`/stocks/${encodeURIComponent(item.id)}`} key={item.id}
+        {results.map(item => <Link href={`/stocks/${encodeURIComponent(item.id)}?market=${item.market === "us" ? "us" : "kr"}`} key={`${item.market}:${item.id}`}
           onClick={() => remember({ symbol: item.id, name: item.name, market: item.market === "us" ? "us" : "kr" })}>
           <div><strong>{item.name}</strong><small>{item.id}</small></div><span>{item.market === "kr" ? "국내" : "미국"}</span><i>상세 보기 →</i>
         </Link>)}
@@ -70,16 +73,16 @@ export function StocksExplorer() {
 
     {recent.length > 0 && <section className="stock-explorer-section">
       <div className="stock-explorer-heading"><div><span>HISTORY</span><h2>최근 조회 종목</h2></div><button onClick={() => { clearRecentStocks(); setRecent([]); }}>전체 삭제</button></div>
-      <div className="stock-shortcuts">{recent.map(stock => <StockShortcut key={stock.symbol} stock={stock} onChoose={remember} />)}</div>
+      <div className="stock-shortcuts">{recent.map(stock => <StockShortcut key={`${stock.market}:${stock.symbol}`} stock={stock} onChoose={remember} />)}</div>
     </section>}
 
     <section className="stock-explorer-section">
-      <div className="stock-explorer-heading"><div><span>QUICK ACCESS</span><h2>주요 국내 종목</h2></div><p>빠른 탐색을 위한 대표 종목입니다.</p></div>
-      <div className="stock-shortcuts">{featured.map(stock => <StockShortcut key={stock.symbol} stock={stock} onChoose={remember} />)}</div>
+      <div className="stock-explorer-heading"><div><span>QUICK ACCESS</span><h2>주요 한국·미국 종목</h2></div><p>선택한 종목만 시세와 차트를 불러와 공유 캐시에 저장합니다.</p></div>
+      <div className="stock-shortcuts">{featured.map(stock => <StockShortcut key={`${stock.market}:${stock.symbol}`} stock={stock} onChoose={remember} />)}</div>
     </section>
   </>;
 }
 
 function StockShortcut({ stock, onChoose }: { stock: RecentStock; onChoose: (stock: RecentStock) => void }) {
-  return <Link href={`/stocks/${stock.symbol}`} onClick={() => onChoose(stock)}><span>{stock.market === "kr" ? "KRX" : "US"}</span><strong>{stock.name}</strong><small>{stock.symbol}</small><i>→</i></Link>;
+  return <Link href={`/stocks/${stock.symbol}?market=${stock.market}`} onClick={() => onChoose(stock)}><span>{stock.market === "kr" ? "KRX" : "US"}</span><strong>{stock.name}</strong><small>{stock.symbol}</small><i>→</i></Link>;
 }

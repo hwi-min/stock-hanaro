@@ -7,15 +7,19 @@ import { StockPriceChart } from "./StockPriceChart";
 import type { StockDetail, StockInterval } from "@/lib/types";
 import { saveRecentStock } from "@/lib/recent-stocks";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
-
 function formatKst(value: string): string {
   const date = new Date(new Date(value).getTime() + 9 * 60 * 60 * 1000);
   const pad = (part: number) => part.toString().padStart(2, "0");
   return `${date.getUTCFullYear()}.${pad(date.getUTCMonth() + 1)}.${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
 }
 
-export function StockDetailClient({ symbol, initialStock = null }: { symbol: string; initialStock?: StockDetail | null }) {
+function formatBasis(stock: StockDetail): string {
+  if (stock.basis !== "close" || !stock.session_date) return `${formatKst(stock.as_of)} KST 시세 기준`;
+  const value = stock.session_date;
+  return `${Number(value.slice(4, 6))}월 ${Number(value.slice(6, 8))}일 종가 기준`;
+}
+
+export function StockDetailClient({ symbol, market, initialStock = null }: { symbol: string; market?: "kr" | "us"; initialStock?: StockDetail | null }) {
   const [interval, setInterval] = useState<StockInterval>("daily");
   const [stock, setStock] = useState<StockDetail | null>(initialStock);
   const initialRequestKey = useRef(initialStock ? `${symbol}:${initialStock.interval}` : null);
@@ -27,11 +31,12 @@ export function StockDetailClient({ symbol, initialStock = null }: { symbol: str
       initialRequestKey.current = null;
       return;
     }
-    fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?interval=${interval}`, { cache: "no-store" })
+    const query = new URLSearchParams({ interval }); if (market) query.set("market", market);
+    fetch(`/api/stocks/${encodeURIComponent(symbol)}?${query}`, { cache: "no-store" })
       .then(async response => { if (!response.ok) throw new Error(response.status === 404 ? "지원하는 종목을 찾지 못했습니다." : "시세를 불러오지 못했습니다."); return response.json() as Promise<StockDetail>; })
       .then(value => { setStock(value); setRequestError(null); })
       .catch(reason => setRequestError({ key, message: reason.message }));
-  }, [symbol, interval]);
+  }, [symbol, market, interval]);
   const recentSymbol = stock?.symbol, recentName = stock?.name, recentMarket = stock?.market;
   useEffect(() => {
     if (recentSymbol && recentName && recentMarket) saveRecentStock({ symbol: recentSymbol, name: recentName, market: recentMarket });
@@ -42,12 +47,12 @@ export function StockDetailClient({ symbol, initialStock = null }: { symbol: str
   const positive = stock.change_pct >= 0;
   const money = new Intl.NumberFormat(stock.market === "kr" ? "ko-KR" : "en-US", { maximumFractionDigits: stock.market === "kr" ? 0 : 2, minimumFractionDigits: stock.market === "kr" ? 0 : 2 });
   return <DetailPage eyebrow={`${stock.sector} · ${stock.industry}`} title={`${stock.symbol} · ${stock.name}`}
-    description={stock.market === "kr" ? "KIS 국내주식 시세와 실시간 체결을 결합해 핵심 가격 흐름을 제공합니다." : "KIS 해외주식 마지막 정규장 종가와 일봉 가격 흐름을 제공합니다."}>
+    description={stock.market === "kr" ? "KIS 국내주식 시세와 가격 흐름을 제공합니다." : "KIS 해외주식 시세와 일봉 가격 흐름을 제공합니다."}>
     <section className="stock-summary stock-summary-primary">
-      <div><span>{stock.market === "kr" ? "현재가" : "마지막 종가"}</span><strong>{stock.currency === "USD" ? "$" : "₩"}{money.format(stock.price)}</strong></div>
+      <div><span>현재가</span><strong>{stock.currency === "USD" ? "$" : "₩"}{money.format(stock.price)}</strong></div>
       <div><span>전일 대비</span><strong className={positive ? "up" : "down"}>{stock.change >= 0 ? "+" : ""}{money.format(stock.change)} · {stock.change_pct >= 0 ? "+" : ""}{stock.change_pct.toFixed(2)}%</strong></div>
       <div><span>거래량</span><strong>{stock.volume == null ? "-" : stock.volume.toLocaleString()}</strong><small>{stock.exchange}</small></div>
-      <div><span>데이터 상태</span><strong>{stock.basis === "close" ? "정규장 종가" : `${stock.market_source ?? "KRX"} 시세`}</strong><small>{stock.session_date ? `${stock.session_date.slice(0, 4)}.${stock.session_date.slice(4, 6)}.${stock.session_date.slice(6, 8)} 기준` : `${formatKst(stock.as_of)} KST · 최대 ${stock.refresh_after_seconds ?? 10}초 캐시`}</small></div>
+      <div><span>데이터 상태</span><strong>{formatBasis(stock)}</strong><small>{stock.market_source ?? "KRX"} · KIS</small></div>
     </section>
     {stock.market === "kr" && <section className="investment-metrics" aria-label="투자 지표">
       <Metric label="시가총액" value={stock.market_cap == null ? "-" : `${(stock.market_cap / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}조`} />
@@ -65,7 +70,7 @@ export function StockDetailClient({ symbol, initialStock = null }: { symbol: str
     </p>}
     <Section title="가격 추이"><div className="chart-toolbar">
       {(["daily", "weekly", "monthly"] as StockInterval[]).map(value => <button key={value} className={interval === value ? "active" : ""} onClick={() => setInterval(value)}>{value === "daily" ? "일봉" : value === "weekly" ? "주봉" : "월봉"}</button>)}
-    </div><StockPriceChart points={stock.chart} interval={stock.interval} currency={stock.currency} /></Section>
+    </div><StockPriceChart points={stock.chart} interval={stock.interval} currency={stock.currency} market={stock.market} /></Section>
   </DetailPage>;
 }
 

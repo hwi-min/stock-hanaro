@@ -5,7 +5,7 @@ import type { ChartPoint, StockInterval } from "@/lib/types";
 
 const intervalLabel = (interval: StockInterval) => interval === "daily" ? "일봉" : interval === "weekly" ? "주봉" : interval === "monthly" ? "월봉" : "분봉";
 
-export function StockPriceChart({ points, interval, currency }: { points: ChartPoint[]; interval: StockInterval; currency: "KRW" | "USD" }) {
+export function StockPriceChart({ points, interval, currency, market }: { points: ChartPoint[]; interval: StockInterval; currency: "KRW" | "USD"; market: "kr" | "us" }) {
   const [hovered, setHovered] = useState<number | null>(null);
   if (!points.length) return <div className="stock-chart empty-chart">표시할 가격 데이터가 없습니다.</div>;
   const visible = points.slice(-80);
@@ -27,6 +27,11 @@ export function StockPriceChart({ points, interval, currency }: { points: ChartP
   const activeChangePct = activeChange != null && previous?.close ? activeChange / previous.close * 100 : null;
   const money = new Intl.NumberFormat(currency === "KRW" ? "ko-KR" : "en-US", { maximumFractionDigits: currency === "KRW" ? 0 : 2 });
   const formatDate = (time: string) => interval === "minute" ? `${time.slice(0, 2)}:${time.slice(2, 4)}` : `${time.slice(0, 4)}.${time.slice(4, 6)}.${time.slice(6, 8)}`;
+  const kstParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const kst = (type: string) => kstParts.find(part => part.type === type)?.value ?? "0";
+  const kstDate = `${kst("year")}${kst("month")}${kst("day")}`;
+  const kstMinutes = Number(kst("hour")) * 60 + Number(kst("minute"));
+  const closeLabel = active && market === "kr" && interval === "daily" && active.time === kstDate && kstMinutes >= 9 * 60 && kstMinutes < 15 * 60 + 30 ? "현재가" : "종가";
   const move = (event: MouseEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const viewX = ((event.clientX - bounds.left) / bounds.width) * 900;
@@ -55,7 +60,7 @@ export function StockPriceChart({ points, interval, currency }: { points: ChartP
           <dt>시가</dt><dd>{money.format(active.open ?? active.close)}</dd>
           <dt>고가</dt><dd>{money.format(active.high ?? active.close)}</dd>
           <dt>저가</dt><dd>{money.format(active.low ?? active.close)}</dd>
-          <dt>종가</dt><dd>{money.format(active.close)}</dd>
+          <dt>{closeLabel}</dt><dd>{money.format(active.close)}</dd>
           <dt>전 봉 대비</dt><dd>{activeChange == null ? "-" : `${activeChange >= 0 ? "+" : ""}${money.format(activeChange)}`}</dd>
           <dt>등락률</dt><dd>{activeChangePct == null ? "-" : `${activeChangePct >= 0 ? "+" : ""}${activeChangePct.toFixed(2)}%`}</dd>
           <dt>거래량</dt><dd>{active.volume == null ? "-" : active.volume.toLocaleString()}</dd>

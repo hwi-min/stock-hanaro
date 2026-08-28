@@ -14,7 +14,7 @@ export function loadRecentStocks(): RecentStock[] {
 
 export function saveRecentStock(stock: RecentStock): RecentStock[] {
   if (typeof window === "undefined") return [];
-  const next = [stock, ...loadRecentStocks().filter(item => item.symbol !== stock.symbol)].slice(0, 6);
+  const next = [stock, ...loadRecentStocks().filter(item => item.symbol !== stock.symbol || item.market !== stock.market)].slice(0, 8);
   window.localStorage.setItem(KEY, JSON.stringify(next));
   return next;
 }
