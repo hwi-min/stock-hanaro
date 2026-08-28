@@ -7,6 +7,7 @@ type Json = Record<string, unknown>;
 type CacheRow = { cache_key: string; payload_json: string; expires_at: string; updated_at: string };
 type TokenRow = { environment: string; access_token: string; expires_at: string; issued_at: string };
 type StockMaster = { symbol: string; name: string; market: string };
+type UsStockMaster = { symbol: string; kis_symbol: string; name: string; exchange: string; sector: string; industry: string };
 
 const inFlight = new Map<string, Promise<unknown>>();
 let memoryToken: { value: string; expiresAt: number } | null = null;
@@ -115,6 +116,16 @@ function quoteTtl() {
   return 43200;
 }
 
+function usMarketOpen() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const get = (type: string) => parts.find(part => part.type === type)?.value ?? "0";
+  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+  return !["Sat", "Sun"].includes(get("weekday")) && minutes >= 4 * 60 && minutes < 20 * 60;
+}
+
+function usQuoteTtl() { return usMarketOpen() ? 60 : 43200; }
+function usChartTtl() { return usMarketOpen() ? 300 : 43200; }
+
 async function domesticPrice(symbol: string, code: string) {
   const next = code !== "J";
   const data = await kisGet(
@@ -179,6 +190,51 @@ async function domesticChart(symbol: string, interval: StockInterval): Promise<C
   }).reverse();
 }
 
+async function overseasPrice(symbol: string, exchange: string) {
+  const data = await kisGet("/uapi/overseas-price/v1/quotations/price-detail", "HHDFS76200200", { AUTH: "", EXCD: exchange, SYMB: symbol });
+  const output = (data.output || {}) as Json, price = numeric(output.last);
+  if (price === null || price <= 0) throw new Error(`KIS returned no overseas price for ${exchange}:${symbol}`);
+  const base = numeric(output.base), change = base ? price - base : numeric(output.diff) ?? 0;
+  return {
+    price, change, change_pct: base ? change / base * 100 : numeric(output.rate) ?? 0,
+    volume: numeric(output.tvol), market_cap: numeric(output.tomv), per: numeric(output.perx), pbr: numeric(output.pbrx),
+    high_52w: numeric(output.h52p), low_52w: numeric(output.l52p), name: String(output.name || symbol),
+    as_of: new Date().toISOString(), market_source: exchange,
+  };
+}
+
+async function overseasDailyChart(symbol: string, exchange: string): Promise<ChartPoint[]> {
+  const data = await kisGet("/uapi/overseas-price/v1/quotations/dailyprice", "HHDFS76240000", { AUTH: "", EXCD: exchange, SYMB: symbol, GUBN: "0", BYMD: "", MODP: "1" });
+  return ((data.output2 || []) as Json[]).flatMap(row => { const close = numeric(row.clos); return close === null ? [] : [{ time: String(row.xymd), open: numeric(row.open), high: numeric(row.high), low: numeric(row.low), close, volume: numeric(row.tvol) }]; }).reverse();
+}
+
+function aggregateChart(points: ChartPoint[], interval: StockInterval): ChartPoint[] {
+  if (interval === "daily") return points;
+  const grouped = new Map<string, ChartPoint[]>();
+  for (const point of points) {
+    const date = new Date(`${point.time.slice(0, 4)}-${point.time.slice(4, 6)}-${point.time.slice(6, 8)}T00:00:00Z`);
+    const key = interval === "monthly" ? point.time.slice(0, 6) : `${date.getUTCFullYear()}-${Math.floor((date.getTime() - Date.UTC(date.getUTCFullYear(), 0, 1)) / 604800000)}`;
+    grouped.set(key, [...(grouped.get(key) ?? []), point]);
+  }
+  return [...grouped.values()].map(rows => {
+    const highs = rows.flatMap(row => row.high === null ? [] : [row.high]);
+    const lows = rows.flatMap(row => row.low === null ? [] : [row.low]);
+    return { time: rows.at(-1)!.time, open: rows[0].open, high: highs.length ? Math.max(...highs) : null, low: lows.length ? Math.min(...lows) : null, close: rows.at(-1)!.close, volume: rows.reduce((sum, row) => sum + (row.volume ?? 0), 0) };
+  });
+}
+
+async function resolveUsStock(symbol: string): Promise<UsStockMaster> {
+  const rows = await supabaseSelect<UsStockMaster>("sp500_constituents", { select: "symbol,kis_symbol,name,exchange,sector,industry", symbol: `eq.${symbol}`, active: "eq.true", limit: 1 });
+  if (rows[0]) return rows[0];
+  for (const exchange of ["NAS", "NYS", "AMS"]) {
+    try {
+      const result = await cached(`kis:us:quote:${exchange}:${symbol}`, usQuoteTtl(), () => overseasPrice(symbol, exchange));
+      return { symbol, kis_symbol: symbol, name: result.value.name || symbol, exchange, sector: "US Equity", industry: "미국 상장주식" };
+    } catch { /* Try the next US exchange for direct ticker lookup. */ }
+  }
+  throw new Error(`KIS에서 미국 종목 ${symbol}을 찾지 못했습니다`);
+}
+
 async function valuation(symbol: string) {
   const [invest, wise] = await Promise.allSettled([
     fetch(`https://theinvest.co.kr/compinfo.php?cd=${symbol}`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; StockHanaro/0.1)" } }).then((r) => r.ok ? r.text() : ""),
@@ -192,8 +248,26 @@ async function valuation(symbol: string) {
   return { psr, pcr, ev_ebitda, basis: sources.length ? "최근 확정실적(TTM/연간)" : null, source: sources.join(" · ") || null };
 }
 
-export async function getWorkerStockDetail(symbolValue: string, interval: StockInterval): Promise<StockDetail | null> {
+export async function getWorkerStockDetail(symbolValue: string, interval: StockInterval, marketHint?: "kr" | "us"): Promise<StockDetail | null> {
   const symbol = symbolValue.toUpperCase();
+  if (marketHint === "us" || (!marketHint && !/^\d{6}$/.test(symbol))) {
+    const master = await resolveUsStock(symbol), quoteTtlSeconds = usQuoteTtl();
+    const quoteResult = await cached(`kis:us:quote:${master.exchange}:${master.kis_symbol}`, quoteTtlSeconds, () => overseasPrice(master.kis_symbol, master.exchange));
+    const chartResult = await cached(`kis:us:chart:${master.exchange}:${master.kis_symbol}:daily`, usChartTtl(), () => overseasDailyChart(master.kis_symbol, master.exchange));
+    const chart = aggregateChart(chartResult.value, interval), quote = quoteResult.value;
+    const latest = chart.at(-1), previous = chart.at(-2);
+    const closeChange = latest && previous ? latest.close - previous.close : quote.change;
+    const closeChangePct = latest && previous && previous.close ? closeChange / previous.close * 100 : quote.change_pct;
+    return {
+      symbol, name: master.name || quote.name || symbol, market: "us", exchange: master.exchange, market_source: master.exchange,
+      sector: master.sector || "US Equity", industry: master.industry || "미국 상장주식", currency: "USD",
+      price: latest?.close ?? quote.price, change: closeChange, change_pct: closeChangePct, volume: latest?.volume ?? quote.volume,
+      market_cap: quote.market_cap, per: quote.per, pbr: quote.pbr, psr: null, pcr: null, ev_ebitda: null,
+      valuation_basis: null, valuation_source: null, foreign_ownership_pct: null, high_52w: quote.high_52w, low_52w: quote.low_52w,
+      as_of: quote.as_of, cached_at: quoteResult.cachedAt, cache_hit: quoteResult.hit && chartResult.hit, refresh_after_seconds: Math.min(quoteTtlSeconds, usChartTtl()),
+      session_date: latest?.time ?? null, basis: "close", interval, chart,
+    };
+  }
   const masters = await supabaseSelect<StockMaster>("stock_masters", { select: "symbol,name,market", symbol: `eq.${symbol}`, active: "eq.true", limit: 1 });
   const master = masters[0];
   if (!master) return null;
