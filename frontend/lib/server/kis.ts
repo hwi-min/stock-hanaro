@@ -165,9 +165,10 @@ export async function getFreshDomesticIndices() {
     const value = quoteTtl();
     return value === 10 ? 30 : value;
   })();
+  const cachePhase = ttl >= 43200 ? "closed" : "live";
   const specs = [["KOSPI", "0001", "KOSPI"], ["KOSDAQ", "1001", "KOSDAQ"], ["KOSPI200", "2001", "KOSPI 200"]] as const;
   const results = await Promise.allSettled(specs.map(([symbol, code, name]) =>
-    cached(`kis:kr:index:${symbol}`, ttl, () => domesticIndex(symbol, code, name)).then((result) => result.value)
+    cached(`kis:kr:index:${cachePhase}:${symbol}`, ttl, () => domesticIndex(symbol, code, name)).then((result) => result.value)
   ));
   return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
 }
