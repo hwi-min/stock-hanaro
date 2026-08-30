@@ -10,6 +10,6 @@ export function Header() {
   return <header className="site-header">
     <Link className="brand" href="/"><span>stock</span> hanaro<small>MARKET INTELLIGENCE</small></Link>
     <nav>{links.map(([href, label]) => <Link key={href} href={href}>{label}</Link>)}</nav>
-    <div className="header-meta"><SearchBox /><Link className="data-status" href="/status"><i />데이터 정상</Link></div>
+    <div className="header-meta"><SearchBox /><Link className="data-status" href="/status"><i />데이터 상태</Link></div>
   </header>;
 }
