@@ -1,14 +1,36 @@
 import type { MarketMetric } from "@/lib/types";
 
+function latestAsOf(metrics: MarketMetric[]): Date | null {
+  const timestamps = metrics.map(metric => new Date(metric.as_of).getTime()).filter(Number.isFinite);
+  return timestamps.length ? new Date(Math.max(...timestamps)) : null;
+}
+
+function parts(value: Date, timeZone: string) {
+  const values = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(value);
+  return (type: string) => values.find(part => part.type === type)?.value ?? "";
+}
+
+function marketTimestamp(market: "us" | "kr", metrics: MarketMetric[]): string {
+  const latest = latestAsOf(metrics);
+  if (!latest) return "기준시각 확인 중";
+  const value = parts(latest, market === "us" ? "America/New_York" : "Asia/Seoul");
+  const date = `${value("year")}-${value("month")}-${value("day")}`;
+  return market === "us" ? `${date} 종가` : `${date} KST ${value("hour")}:${value("minute")}`;
+}
+
 export function LiveMarketBoard({ initialMetrics }: { initialMetrics: MarketMetric[] }) {
+  const usMetrics = initialMetrics.filter(metric => metric.market === "us");
+  const krMetrics = initialMetrics.filter(metric => metric.market === "kr");
   const rows = [
-    { id: "us", label: "US Market", note: "최근 정규장 종가", metrics: initialMetrics.filter(metric => metric.market === "us") },
-    { id: "kr", label: "KR Market", note: "KIS 기준 · 최근 시세", metrics: initialMetrics.filter(metric => metric.market === "kr") },
+    { id: "us" as const, label: "US Market", metrics: usMetrics },
+    { id: "kr" as const, label: "KR Market", metrics: krMetrics },
   ];
 
   return <section className="market-board" aria-label="주요 시장 지표">
     {rows.map(row => <div className="market-row" key={row.id}>
-      <div className="market-label"><span className="market-signal" aria-hidden="true">●</span><div><b>{row.label}</b><small>{row.note}</small></div></div>
+      <div className="market-label"><span className="market-signal" aria-hidden="true">●</span><div><b>{row.label}</b><small>{marketTimestamp(row.id, row.metrics)}</small></div></div>
       <div className="market-tickers">{row.metrics.map(metric => <article key={metric.symbol}>
         <div><span>{metric.label}</span><strong>{metric.value}</strong><em className={metric.change_pct >= 0 ? "up" : "down"}>{metric.change_pct >= 0 ? "+" : ""}{metric.change_pct.toFixed(2)}%</em></div>
         <svg className={metric.change_pct >= 0 ? "sparkline positive-line" : "sparkline negative-line"} viewBox="0 0 78 34" role="img" aria-label={`${metric.label} 미니 추세`}>
