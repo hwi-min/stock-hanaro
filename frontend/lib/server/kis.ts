@@ -173,6 +173,19 @@ export async function getFreshDomesticIndices() {
   return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
 }
 
+type DomesticIndex = Awaited<ReturnType<typeof domesticIndex>>;
+
+export async function getLastCachedDomesticIndices() {
+  const symbols = ["KOSPI", "KOSDAQ", "KOSPI200"] as const;
+  const results = await Promise.allSettled(symbols.map(async (symbol) => {
+    const rows = await supabaseSelect<CacheRow>("api_cache", {
+      select: "payload_json,updated_at", cache_key: `eq.kis:kr:index:live:${symbol}`, limit: 1,
+    }, { timeoutMs: 800 });
+    return rows[0] ? JSON.parse(rows[0].payload_json) as DomesticIndex : null;
+  }));
+  return results.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
+}
+
 function ymd(date: Date) { return date.toISOString().slice(0, 10).replaceAll("-", ""); }
 
 async function domesticChart(symbol: string, interval: StockInterval): Promise<ChartPoint[]> {
