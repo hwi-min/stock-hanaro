@@ -4,6 +4,7 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from app.collectors.kis import KISClient
+from app.collectors.sp500 import kis_symbol_candidates
 from app.models.sp500 import Sp500Constituent
 from app.repositories.sp500 import Sp500Repository
 from app.core.config import settings
@@ -55,9 +56,7 @@ class Sp500CloseService:
         return snapshots, errors
 
     async def _history(self, constituent: Sp500Constituent, target_date) -> tuple[list[dict], dict]:
-        candidates = [constituent.kis_symbol]
-        if "/" in constituent.kis_symbol:
-            candidates.extend([constituent.symbol, constituent.symbol.replace(".", "-")])
+        candidates = kis_symbol_candidates(constituent.symbol, constituent.kis_symbol)
         last_error: Exception | None = None
         for symbol in dict.fromkeys(candidates):
             try:

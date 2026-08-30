@@ -12,6 +12,11 @@ from bs4 import BeautifulSoup
 IVV_HOLDINGS_URL = "https://www.ishares.com/us/products/239726/ishares-core-sp-500-etf/latest-holdings.csv"
 SP500_TAXONOMY_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
+KIS_CLASS_SHARE_SYMBOLS = {
+    "BFB": "BF/B",
+    "BRKB": "BRK/B",
+}
+
 
 @dataclass(frozen=True)
 class Sp500ConstituentPayload:
@@ -41,8 +46,16 @@ def _exchange(value: str) -> str:
     return "AMS"
 
 
-def _kis_symbol(symbol: str) -> str:
-    return symbol.replace(".", "/")
+def normalize_kis_symbol(symbol: str) -> str:
+    normalized = symbol.strip().upper()
+    return KIS_CLASS_SHARE_SYMBOLS.get(normalized, normalized.replace(".", "/"))
+
+
+def kis_symbol_candidates(symbol: str, stored_kis_symbol: str) -> list[str]:
+    candidates = [stored_kis_symbol, normalize_kis_symbol(symbol)]
+    if any("/" in candidate for candidate in candidates):
+        candidates.extend([symbol, symbol.replace(".", "-")])
+    return list(dict.fromkeys(candidates))
 
 
 class Sp500MasterCollector:
@@ -99,7 +112,7 @@ class Sp500MasterCollector:
             taxonomy_key = symbol.replace(".", "-")
             sector, industry = taxonomy.get(taxonomy_key, ((row.get("Sector") or "Other").strip(), "Other"))
             result.append(Sp500ConstituentPayload(
-                symbol=symbol, kis_symbol=_kis_symbol(symbol), name=(row.get("Name") or symbol).strip(),
+                symbol=symbol, kis_symbol=normalize_kis_symbol(symbol), name=(row.get("Name") or symbol).strip(),
                 exchange=_exchange(row.get("Exchange") or ""), sector=sector or "Other",
                 industry=industry or "Other", index_weight=weight,
                 source_date=source_date,
