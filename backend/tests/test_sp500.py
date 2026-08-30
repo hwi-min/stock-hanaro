@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.collectors.kis import KISClient
-from app.collectors.sp500 import Sp500MasterCollector
+from app.collectors.sp500 import Sp500MasterCollector, kis_symbol_candidates, normalize_kis_symbol
 
 
 def test_ivv_parser_excludes_non_equities_and_zero_weight_rows():
@@ -18,6 +18,15 @@ def test_ivv_parser_excludes_non_equities_and_zero_weight_rows():
     assert "AAPL" in symbols
     assert "USD" not in symbols
     assert "OLD" not in symbols
+
+
+def test_kis_symbol_normalizes_class_shares_from_ivv_format():
+    assert normalize_kis_symbol("BRKB") == "BRK/B"
+    assert normalize_kis_symbol("BFB") == "BF/B"
+    assert normalize_kis_symbol("BRK.B") == "BRK/B"
+    assert normalize_kis_symbol("AAPL") == "AAPL"
+    assert kis_symbol_candidates("BRKB", "BRKB")[:2] == ["BRKB", "BRK/B"]
+    assert kis_symbol_candidates("BFB", "BFB")[:2] == ["BFB", "BF/B"]
 
 
 def test_regular_close_uses_1600_open_and_regular_session_volume(monkeypatch):
