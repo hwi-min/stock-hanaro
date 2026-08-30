@@ -18,6 +18,7 @@ function headers(key: string): Record<string, string> {
 export async function supabaseSelect<T>(
   table: string,
   query: Record<string, QueryValue> = {},
+  options: { timeoutMs?: number } = {},
 ): Promise<T[]> {
   const { url, key } = config();
   const params = new URLSearchParams();
@@ -27,6 +28,7 @@ export async function supabaseSelect<T>(
   const response = await fetch(`${url}/rest/v1/${table}?${params}`, {
     headers: headers(key),
     cache: "no-store",
+    signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
   });
   if (!response.ok) throw new Error(`Supabase ${table} query failed (${response.status}): ${await response.text()}`);
   return response.json() as Promise<T[]>;
@@ -36,6 +38,7 @@ export async function supabaseUpsert<T extends Record<string, unknown>>(
   table: string,
   value: T | T[],
   onConflict?: string,
+  options: { timeoutMs?: number } = {},
 ): Promise<void> {
   const { url, key } = config();
   const suffix = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
@@ -47,6 +50,7 @@ export async function supabaseUpsert<T extends Record<string, unknown>>(
       Prefer: "resolution=merge-duplicates,return=minimal",
     },
     body: JSON.stringify(value),
+    signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
   });
   if (!response.ok) throw new Error(`Supabase ${table} upsert failed (${response.status}): ${await response.text()}`);
 }

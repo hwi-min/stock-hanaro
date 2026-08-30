@@ -18,4 +18,5 @@ export type Dashboard = {
   kcif: { id: string; title: string; summary: string; topic: string; source_url: string; as_of: string }[];
   research: Pick<ResearchReport, "id" | "category" | "title" | "broker" | "analyst" | "published_on" | "stock_code" | "stock_name" | "source_url">[];
   freshness: { dataset: string; label: string; as_of: string; stale: boolean }[];
+  data_status?: Record<string, { state: "live" | "delayed" | "unavailable"; as_of: string | null }>;
 };

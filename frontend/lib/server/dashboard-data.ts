@@ -1,10 +1,47 @@
 import "server-only";
 
 import type { Dashboard, IssueItem } from "@/lib/types";
-import { numeric, supabaseSelect } from "./supabase-rest";
+import { numeric, supabaseSelect, supabaseUpsert } from "./supabase-rest";
 import { getFreshDomesticIndices } from "./kis";
 
 type Row = Record<string, string | number | boolean | null>;
+type DatasetResult = { rows: Row[]; live: boolean };
+type DashboardCacheRow = { payload_json: string; updated_at: string };
+
+const DASHBOARD_SNAPSHOT_KEY = "dashboard:home:last-success:v1";
+
+async function loadRows(table: string, query: Record<string, string | number | boolean>): Promise<DatasetResult> {
+  try {
+    return { rows: await supabaseSelect<Row>(table, query, { timeoutMs: 1800 }), live: true };
+  } catch {
+    try {
+      return { rows: await supabaseSelect<Row>(table, query, { timeoutMs: 1000 }), live: true };
+    } catch {
+      return { rows: [], live: false };
+    }
+  }
+}
+
+async function readDashboardSnapshot(): Promise<Dashboard | null> {
+  try {
+    const rows = await supabaseSelect<DashboardCacheRow>("api_cache", {
+      select: "payload_json,updated_at", cache_key: `eq.${DASHBOARD_SNAPSHOT_KEY}`, limit: 1,
+    }, { timeoutMs: 1200 });
+    return rows[0] ? JSON.parse(rows[0].payload_json) as Dashboard : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeDashboardSnapshot(value: Dashboard): Promise<void> {
+  const now = new Date();
+  await supabaseUpsert("api_cache", {
+    cache_key: DASHBOARD_SNAPSHOT_KEY,
+    payload_json: JSON.stringify(value),
+    updated_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + 30 * 86400000).toISOString(),
+  }, "cache_key", { timeoutMs: 1200 });
+}
 
 const metricOrder = ["SPX", "DOW30", "NASDAQ", "RUSSELL2000", "VIX", "GOLD", "KOSPI", "KOSDAQ", "KOSPI200", "USDKRW", "KTB3Y"];
 const labels: Record<string, string> = {
@@ -26,18 +63,29 @@ function stale(value: unknown, thresholdMs: number) {
 
 export async function getWorkerDashboard(): Promise<Dashboard> {
   const [weekStart, weekEnd] = mondayBounds();
-  const [storedQuotes, events, summaries, news, disclosures, kcif, research, sp500Constituents, sp500Snapshots] = await Promise.all([
-    supabaseSelect<Row>("market_quotes", { select: "*", order: "market_cap.desc.nullslast" }),
-    supabaseSelect<Row>("economic_events", { select: "*", scheduled_at_utc: `gte.${weekStart}`, and: `(scheduled_at_utc.lt.${weekEnd})`, order: "scheduled_at_utc.asc" }),
-    supabaseSelect<Row>("issue_summaries", { select: "*", order: "generated_at.desc", limit: 6 }),
-    supabaseSelect<Row>("news_articles", { select: "*", order: "published_at.desc.nullslast,collected_at.desc", limit: 60 }),
-    supabaseSelect<Row>("disclosures", { select: "*", order: "receipt_date.desc,importance.desc,receipt_no.desc", limit: 30 }),
-    supabaseSelect<Row>("kcif_reports", { select: "*", order: "report_date.desc", limit: 3 }),
-    supabaseSelect<Row>("research_reports", { select: "*", order: "published_on.desc,id.desc", limit: 12 }),
-    supabaseSelect<Row>("sp500_constituents", { select: "*", active: "eq.true", limit: 600 }).catch(() => []),
-    supabaseSelect<Row>("sp500_daily_snapshots", { select: "*", order: "trading_date.desc,index_weight.desc", limit: 1200 }).catch(() => []),
-  ]);
-  const freshDomestic = process.env.KIS_APP_KEY && process.env.KIS_APP_SECRET ? await getFreshDomesticIndices() : [];
+  const snapshotPromise = readDashboardSnapshot();
+  const freshDomesticPromise = process.env.KIS_APP_KEY && process.env.KIS_APP_SECRET
+    ? Promise.race([
+      getFreshDomesticIndices(),
+      new Promise<Awaited<ReturnType<typeof getFreshDomesticIndices>>>((resolve) => setTimeout(() => resolve([]), 1200)),
+    ])
+    : Promise.resolve([]);
+  const minimumLoadingTime = new Promise<void>((resolve) => setTimeout(resolve, 600));
+  const [results] = await Promise.all([Promise.all([
+    loadRows("market_quotes", { select: "*", order: "market_cap.desc.nullslast" }),
+    loadRows("economic_events", { select: "*", scheduled_at_utc: `gte.${weekStart}`, and: `(scheduled_at_utc.lt.${weekEnd})`, order: "scheduled_at_utc.asc" }),
+    loadRows("issue_summaries", { select: "*", order: "generated_at.desc", limit: 6 }),
+    loadRows("news_articles", { select: "*", order: "published_at.desc.nullslast,collected_at.desc", limit: 60 }),
+    loadRows("disclosures", { select: "*", order: "receipt_date.desc,importance.desc,receipt_no.desc", limit: 30 }),
+    loadRows("kcif_reports", { select: "*", order: "report_date.desc", limit: 3 }),
+    loadRows("research_reports", { select: "*", order: "published_on.desc,id.desc", limit: 12 }),
+    loadRows("sp500_constituents", { select: "*", active: "eq.true", limit: 600 }),
+    loadRows("sp500_daily_snapshots", { select: "*", order: "trading_date.desc,index_weight.desc", limit: 1200 }),
+  ]), minimumLoadingTime]);
+  const [marketResult, eventResult, summaryResult, newsResult, disclosureResult, kcifResult, researchResult, constituentResult, snapshotResult] = results;
+  const [storedQuotes, events, summaries, news, disclosures, kcif, research, sp500Constituents, sp500Snapshots] = results.map(result => result.rows);
+  const previous = await snapshotPromise;
+  const freshDomestic = await freshDomesticPromise;
   const freshBySymbol = new Map(freshDomestic.map((row) => [row.symbol, row]));
   const quotes = storedQuotes.map((row) => freshBySymbol.get(String(row.symbol)) || row);
 
@@ -120,7 +168,8 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
   const stance = !nasdaq ? "neutral" : nasdaq.change_pct > 0.3 ? "risk_on" : nasdaq.change_pct < -0.3 ? "risk_off" : "neutral";
   const direction = stance === "risk_on" ? "강세" : stance === "risk_off" ? "약세" : "혼조";
   const freshest = (rows: Row[]) => rows.reduce<string | null>((best, row) => {
-    const value = String(row.collected_at || "");
+    const value = String(row.collected_at || row.updated_at || row.generated_at || row.published_at
+      || row.scheduled_at_kst || row.receipt_date || row.report_date || row.source_date || row.trading_date || "");
     return !best || value > best ? value : best;
   }, null);
   const freshnessSpecs: Array<[string, string, Row[], number]> = [
@@ -129,7 +178,11 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
     ["kcif", "KCIF", kcif, 36 * 3600000],
   ];
 
-  return {
+  const status = (key: string, result: DatasetResult, rows: Row[]) => ({
+    state: result.live ? "live" as const : previous ? "delayed" as const : "unavailable" as const,
+    as_of: result.live ? freshest(rows) : previous?.data_status?.[key]?.as_of || previous?.briefing.as_of || null,
+  });
+  const dashboard: Dashboard = {
     briefing: {
       stance,
       headline: nasdaq ? `미국 기술주 흐름은 ${direction}, 환율과 금리를 함께 확인하세요` : "시장 데이터를 준비하고 있습니다",
@@ -162,5 +215,35 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
       const asOf = freshest(rows);
       return asOf ? [{ dataset, label, as_of: asOf, stale: stale(asOf, threshold) }] : [];
     }),
+    data_status: {
+      market: status("market", marketResult, storedQuotes),
+      calendar: status("calendar", eventResult, events),
+      issue_summaries: status("issue_summaries", summaryResult, summaries),
+      news: status("news", newsResult, news),
+      disclosures: status("disclosures", disclosureResult, disclosures),
+      kcif: status("kcif", kcifResult, kcif),
+      research: status("research", researchResult, research),
+      sp500_constituents: status("sp500_constituents", constituentResult, sp500Constituents),
+      sp500_snapshots: status("sp500_snapshots", snapshotResult, sp500Snapshots),
+    },
   };
+
+  if (previous) {
+    if (!marketResult.live) {
+      dashboard.metrics = previous.metrics;
+      dashboard.briefing = previous.briefing;
+    }
+    if (!eventResult.live) dashboard.schedules = previous.schedules;
+    if (!summaryResult.live || !newsResult.live) {
+      dashboard.issues = previous.issues;
+      dashboard.briefing = previous.briefing;
+    }
+    if (!disclosureResult.live) dashboard.disclosures = previous.disclosures;
+    if (!kcifResult.live) dashboard.kcif = previous.kcif;
+    if (!researchResult.live) dashboard.research = previous.research;
+    if (!constituentResult.live || !snapshotResult.live) dashboard.heatmap = previous.heatmap;
+  }
+
+  if (results.every(result => result.live)) await writeDashboardSnapshot(dashboard).catch(() => undefined);
+  return dashboard;
 }
