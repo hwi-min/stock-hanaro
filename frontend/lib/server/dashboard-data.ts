@@ -1,8 +1,8 @@
 import "server-only";
 
-import type { Dashboard, IssueItem } from "@/lib/types";
+import type { Dashboard, IssueItem, MarketMetric } from "@/lib/types";
 import { numeric, supabaseSelect, supabaseUpsert } from "./supabase-rest";
-import { getFreshDomesticIndices } from "./kis";
+import { getFreshDomesticIndices, getLastCachedDomesticIndices } from "./kis";
 
 type Row = Record<string, string | number | boolean | null>;
 type DatasetResult = { rows: Row[]; live: boolean };
@@ -64,12 +64,16 @@ function stale(value: unknown, thresholdMs: number) {
 export async function getWorkerDashboard(): Promise<Dashboard> {
   const [weekStart, weekEnd] = mondayBounds();
   const snapshotPromise = readDashboardSnapshot();
+  const cachedDomesticPromise = process.env.KIS_APP_KEY && process.env.KIS_APP_SECRET
+    ? getLastCachedDomesticIndices().catch(() => [])
+    : Promise.resolve([]);
   const freshDomesticPromise = process.env.KIS_APP_KEY && process.env.KIS_APP_SECRET
     ? Promise.race([
-      getFreshDomesticIndices(),
-      new Promise<Awaited<ReturnType<typeof getFreshDomesticIndices>>>((resolve) => setTimeout(() => resolve([]), 1200)),
+      getFreshDomesticIndices().then((rows) => ({ rows, timedOut: false })),
+      new Promise<{ rows: Awaited<ReturnType<typeof getFreshDomesticIndices>>; timedOut: boolean }>((resolve) =>
+        setTimeout(() => resolve({ rows: [], timedOut: true }), 1200)),
     ])
-    : Promise.resolve([]);
+    : Promise.resolve({ rows: [], timedOut: false });
   const minimumLoadingTime = new Promise<void>((resolve) => setTimeout(resolve, 600));
   const [results] = await Promise.all([Promise.all([
     loadRows("market_quotes", { select: "*", order: "market_cap.desc.nullslast" }),
@@ -85,12 +89,14 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
   const [marketResult, eventResult, summaryResult, newsResult, disclosureResult, kcifResult, researchResult, constituentResult, snapshotResult] = results;
   const [storedQuotes, events, summaries, news, disclosures, kcif, research, sp500Constituents, sp500Snapshots] = results.map(result => result.rows);
   const previous = await snapshotPromise;
-  const freshDomestic = await freshDomesticPromise;
+  const domesticResult = await freshDomesticPromise;
+  const cachedDomestic = await cachedDomesticPromise;
+  const freshDomestic = domesticResult.rows.length ? domesticResult.rows : cachedDomestic;
   const freshBySymbol = new Map(freshDomestic.map((row) => [row.symbol, row]));
   const quotes = storedQuotes.map((row) => freshBySymbol.get(String(row.symbol)) || row);
 
   const quoteBySymbol = new Map(quotes.map((row) => [String(row.symbol), row]));
-  const metrics = metricOrder.flatMap((symbol) => {
+  let metrics: MarketMetric[] = metricOrder.flatMap((symbol) => {
     const row = quoteBySymbol.get(symbol);
     const price = numeric(row?.price);
     if (!row || !price || price <= 0) return [];
@@ -182,6 +188,19 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
     state: result.live ? "live" as const : previous ? "delayed" as const : "unavailable" as const,
     as_of: result.live ? freshest(rows) : previous?.data_status?.[key]?.as_of || previous?.briefing.as_of || null,
   });
+
+  // A slow KIS response must not make the dashboard oscillate back to an older
+  // database quote. Keep each last successful live index until it is replaced.
+  if (previous) {
+    const liveDomesticSymbols = new Set(freshDomestic.map((row) => row.symbol));
+    const previousDomestic = new Map(previous.metrics
+      .filter((item) => ["KOSPI", "KOSDAQ", "KOSPI200"].includes(item.symbol))
+      .map((item) => [item.symbol, item]));
+    metrics = metrics.map((item) => {
+      if (!previousDomestic.has(item.symbol) || liveDomesticSymbols.has(item.symbol)) return item;
+      return previousDomestic.get(item.symbol)!;
+    });
+  }
   const dashboard: Dashboard = {
     briefing: {
       stance,
@@ -244,6 +263,8 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
     if (!constituentResult.live || !snapshotResult.live) dashboard.heatmap = previous.heatmap;
   }
 
-  if (results.every(result => result.live)) await writeDashboardSnapshot(dashboard).catch(() => undefined);
+  if (results.every(result => result.live) && !domesticResult.timedOut) {
+    await writeDashboardSnapshot(dashboard).catch(() => undefined);
+  }
   return dashboard;
 }
