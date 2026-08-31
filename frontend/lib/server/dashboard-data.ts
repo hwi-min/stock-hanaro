@@ -189,16 +189,18 @@ export async function getWorkerDashboard(): Promise<Dashboard> {
     as_of: result.live ? freshest(rows) : previous?.data_status?.[key]?.as_of || previous?.briefing.as_of || null,
   });
 
-  // A slow KIS response must not make the dashboard oscillate back to an older
-  // database quote. Keep each last successful live index until it is replaced.
+  // Never let a delayed source move an index backward in time. Once a newer
+  // observation was displayed, it remains until an even newer one replaces it.
   if (previous) {
-    const liveDomesticSymbols = new Set(freshDomestic.map((row) => row.symbol));
     const previousDomestic = new Map(previous.metrics
       .filter((item) => ["KOSPI", "KOSDAQ", "KOSPI200"].includes(item.symbol))
       .map((item) => [item.symbol, item]));
     metrics = metrics.map((item) => {
-      if (!previousDomestic.has(item.symbol) || liveDomesticSymbols.has(item.symbol)) return item;
-      return previousDomestic.get(item.symbol)!;
+      const olderCandidate = previousDomestic.get(item.symbol);
+      if (!olderCandidate) return item;
+      return new Date(olderCandidate.as_of).getTime() > new Date(item.as_of).getTime()
+        ? olderCandidate
+        : item;
     });
   }
   const dashboard: Dashboard = {
