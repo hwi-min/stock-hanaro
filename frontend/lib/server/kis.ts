@@ -10,6 +10,7 @@ type StockMaster = { symbol: string; name: string; market: string };
 type UsStockMaster = { symbol: string; kis_symbol: string; name: string; exchange: string; sector: string; industry: string };
 
 const inFlight = new Map<string, Promise<unknown>>();
+const DOMESTIC_INDEX_SNAPSHOT_KEY = "kis:kr:index:last-success";
 let memoryToken: { value: string; expiresAt: number } | null = null;
 
 function env(name: string) {
@@ -170,17 +171,32 @@ export async function getFreshDomesticIndices() {
   const results = await Promise.allSettled(specs.map(([symbol, code, name]) =>
     cached(`kis:kr:index:${cachePhase}:${symbol}`, ttl, () => domesticIndex(symbol, code, name)).then((result) => result.value)
   ));
-  return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  const rows = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  if (rows.length) {
+    const now = new Date();
+    await supabaseUpsert("api_cache", {
+      cache_key: DOMESTIC_INDEX_SNAPSHOT_KEY,
+      payload_json: JSON.stringify(rows),
+      updated_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + 30 * 86400000).toISOString(),
+    }, "cache_key", { timeoutMs: 2000 }).catch(() => undefined);
+  }
+  return rows;
 }
 
 type DomesticIndex = Awaited<ReturnType<typeof domesticIndex>>;
 
 export async function getLastCachedDomesticIndices() {
+  const snapshot = await supabaseSelect<CacheRow>("api_cache", {
+    select: "payload_json,updated_at", cache_key: `eq.${DOMESTIC_INDEX_SNAPSHOT_KEY}`, limit: 1,
+  }, { timeoutMs: 2000 }).catch(() => []);
+  if (snapshot[0]) return JSON.parse(snapshot[0].payload_json) as DomesticIndex[];
+
   const symbols = ["KOSPI", "KOSDAQ", "KOSPI200"] as const;
   const results = await Promise.allSettled(symbols.map(async (symbol) => {
     const rows = await supabaseSelect<CacheRow>("api_cache", {
       select: "payload_json,updated_at", cache_key: `eq.kis:kr:index:live:${symbol}`, limit: 1,
-    }, { timeoutMs: 800 });
+    }, { timeoutMs: 2000 });
     return rows[0] ? JSON.parse(rows[0].payload_json) as DomesticIndex : null;
   }));
   return results.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
