@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import type { MacroData, MacroMetric, MacroPoint, MacroSeries } from "@/lib/server/fred";
 
 const labels = ["Sep", "Nov", "Jan", "Mar", "May", "Jul", "Aug"];
@@ -49,7 +49,75 @@ function LineChart({ series }: { series: MacroSeries[] }) {
   </svg>{activeIndex !== null && <div className={`macro-tooltip ${activeIndex > axis.length / 2 ? "align-left" : ""}`} style={{ left: tooltipLeft }}><strong>{activeDate}</strong>{series.map(item => { const point = item.points.find(candidate => candidate.label === activeDate); return point && <div key={item.name}><span><i style={{ background: item.color }} />{item.name}</span><b>{point.value.toFixed(2)}%</b></div>; })}</div>}</div>;
 }
 function MetricCard({ item }: { item: MacroMetric }) { return <article className="macro-metric"><div><span>{item.label}</span><small>{item.fred}</small></div><strong>{item.value}</strong><em className={item.direction}>{item.direction === "up" ? "↑" : item.direction === "down" ? "↓" : "→"}</em><p>{item.comparison}</p><time>{item.observationDate} 관측</time></article>; }
-function BlockTitle({ number, title, description }: { number: string; title: string; description: string }) { return <header className="macro-block-title"><b>{number}</b><div><h2>{title}</h2><p>{description}</p></div></header>; }
+function GuideDetails({ children }: { children: ReactNode }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const closeOutside = (event: globalThis.PointerEvent) => {
+      const details = detailsRef.current;
+      if (details?.open && !details.contains(event.target as Node)) details.open = false;
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, []);
+  return <details ref={detailsRef}><summary>데이터 기준 및 업데이트 안내</summary>{children}</details>;
+}
+function BlockTitle({ number, title, description }: { number: string; title: string; description: string }) { const guide = number === "01" ? <BondDataGuide /> : number === "02" ? <InflationDataGuide /> : number === "03" ? <FxDataGuide /> : number === "04" ? <FedDataGuide /> : null; return <><header className="macro-block-title"><b>{number}</b><div><h2>{title}</h2><p>{description}</p></div></header>{guide}</>; }
+function BondDataGuide() {
+  return <aside className="bond-data-guide" aria-label="미국 국채 금리 데이터 안내">
+    <div><strong>FRED 공식 데이터 · 미국 영업일 기준 일간 갱신</strong><span>각 카드의 관측일은 해당 금리가 나타내는 시장 기준일입니다.</span></div>
+    <GuideDetails>
+      <div className="bond-data-guide-body">
+        <p>FRED는 세인트루이스 연방준비은행이 운영하는 경제 데이터 플랫폼입니다. 주말과 미국 공휴일에는 새로운 관측값이 없으며 게시 시각은 달라질 수 있습니다.</p>
+        <dl>
+          <div><dt>US 2Y · 10Y · 30Y</dt><dd>미 연준 H.15의 Constant Maturity 금리입니다. 미국 영업일마다 산출되며 FRED에는 통상 관측일의 다음 영업일에 반영됩니다.</dd></div>
+          <div><dt>10Y–2Y Spread</dt><dd>미국 10년물 금리에서 2년물 금리를 뺀 수익률곡선 지표입니다. 미 재무부 금리를 기반으로 세인트루이스 연은이 산출하며 미국 영업일마다 갱신됩니다.</dd></div>
+        </dl>
+        <small>Stock Hanaro 반영: 페이지 요청 시 FRED 조회 · 최대 1시간 캐시 후 재확인<br />출처: FRED · Federal Reserve H.15 · Federal Reserve Bank of St. Louis</small>
+      </div>
+    </GuideDetails>
+  </aside>;
+}
+function InflationDataGuide() {
+  return <aside className="bond-data-guide" aria-label="미국 물가 데이터 안내">
+    <div><strong>FRED 공식 데이터 · 물가지수 월간 / 기대인플레이션 일간 갱신</strong><span>월간 관측일은 발표일이 아니라 해당 지표가 나타내는 기준월입니다.</span></div>
+    <GuideDetails><div className="bond-data-guide-body">
+      <p>CPI와 Core CPI, Core PCE는 FRED의 계절조정 원지수를 받아 Stock Hanaro가 전년 동월 대비 상승률(YoY)을 직접 계산합니다.</p>
+      <dl>
+        <div><dt>CPI · Core CPI</dt><dd>미 노동통계국(BLS)의 월간 소비자물가지수입니다. 최신 지수를 12개월 전 지수와 비교해 YoY를 계산합니다.</dd></div>
+        <div><dt>Core PCE</dt><dd>미 경제분석국(BEA)의 월간 근원 개인소비지출 물가지수입니다. 같은 방식으로 YoY를 계산합니다.</dd></div>
+        <div><dt>10Y Breakeven</dt><dd>10년 명목 국채금리와 물가연동국채 실질금리의 차이로 계산된 시장 기대인플레이션이며 미국 영업일마다 갱신됩니다.</dd></div>
+      </dl>
+      <small>Stock Hanaro 반영: 페이지 요청 시 FRED 조회 · 최대 1시간 캐시 후 재확인<br />출처: FRED · BLS · BEA · Federal Reserve Bank of St. Louis</small>
+    </div></GuideDetails>
+  </aside>;
+}
+function FxDataGuide() {
+  return <aside className="bond-data-guide" aria-label="미국 달러 및 환율 데이터 안내">
+    <div><strong>FRED 공식 데이터 · 연준 H.10 일간 관측</strong><span>실시간 환율이 아니며 FRED의 공식 관측·게시 일정에 따라 반영됩니다.</span></div>
+    <GuideDetails><div className="bond-data-guide-body">
+      <p>네 지표 모두 미 연준 이사회의 H.10 Foreign Exchange Rates를 FRED에서 제공합니다. 시리즈 빈도는 일간이지만 주말·미국 공휴일에는 관측값이 없고 게시가 묶여 반영될 수 있습니다.</p>
+      <dl>
+        <div><dt>Broad Dollar</dt><dd>미국의 주요 교역상대국 통화를 무역 비중으로 가중한 명목 달러 지수입니다. 값이 오르면 광범위한 달러 강세를 뜻합니다.</dd></div>
+        <div><dt>USD/KRW · USD/JPY</dt><dd>뉴욕 기준 공식 관측 환율로 1달러당 원화·엔화 값입니다. 실시간 서울·도쿄 외환시세와 차이가 날 수 있습니다.</dd></div>
+        <div><dt>EUR/USD</dt><dd>1유로당 미국 달러 값입니다. 다른 두 환율과 표시 방향이 반대이므로 하락은 유로 약세·달러 강세를 뜻합니다.</dd></div>
+      </dl>
+      <small>Stock Hanaro 반영: 페이지 요청 시 FRED 조회 · 최대 1시간 캐시 후 재확인<br />출처: FRED · Federal Reserve H.10 Foreign Exchange Rates</small>
+    </div></GuideDetails>
+  </aside>;
+}
+function FedDataGuide() {
+  return <aside className="bond-data-guide" aria-label="연준 총자산 데이터 안내">
+    <div><strong>FRED 공식 데이터 · 매주 수요일 기준</strong><span>연준 H.4.1에서 통상 미국 목요일에 발표하는 주간 총자산입니다.</span></div>
+    <GuideDetails><div className="bond-data-guide-body">
+      <p>WALCL은 연방준비은행 연결대차대조표의 총자산에서 내부 연결 제거분을 반영한 주간 지표입니다. 관측일은 매주 수요일이며 발표·FRED 반영은 통상 그다음 미국 영업일입니다.</p>
+      <dl>
+        <div><dt>Total Assets</dt><dd>FRED 원자료 단위는 백만 달러입니다. 화면의 총자산은 조 달러(T), 증감액은 십억 달러(B)로 변환해 표시합니다.</dd></div>
+        <div><dt>기간별 증감</dt><dd>전주·13주 전·52주 전 관측값과 최신 관측값의 차이이며 각각 주간·약 3개월·약 1년 변화를 나타냅니다.</dd></div>
+      </dl>
+      <small>Stock Hanaro 반영: 페이지 요청 시 FRED 조회 · 최대 1시간 캐시 후 재확인<br />출처: FRED WALCL · Federal Reserve H.4.1</small>
+    </div></GuideDetails>
+  </aside>;
+}
 function YieldCurve({ data }: { data: MacroPoint[] }) { const [active, setActive] = useState<number | null>(null); const values = data.map(point => point.value); const rawMin = Math.min(...values), rawMax = Math.max(...values); const padding = Math.max(.12, (rawMax - rawMin) * .18); const min = Math.floor((rawMin - padding) * 4) / 4, max = Math.ceil((rawMax + padding) * 4) / 4; const x = (index: number) => 52 + index * 616 / Math.max(1, data.length - 1); const y = (value: number) => 20 + (max - value) / Math.max(.01, max - min) * 145; const coords = data.map((item, index) => ({ x: x(index), y: y(item.value) })); const smoothPath = coords.reduce((path, point, index) => { if (index === 0) return `M ${point.x} ${point.y}`; const previous = coords[index - 1], before = coords[index - 2] ?? previous, after = coords[index + 1] ?? point; const c1x = previous.x + (point.x - before.x) / 6, c1y = previous.y + (point.y - before.y) / 6, c2x = point.x - (after.x - previous.x) / 6, c2y = point.y - (after.y - previous.y) / 6; return `${path} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${point.x} ${point.y}`; }, ""); const select = (event: PointerEvent<SVGSVGElement>) => { const matrix = event.currentTarget.getScreenCTM(); if (!matrix) return; const cursor = event.currentTarget.createSVGPoint(); cursor.x = event.clientX; cursor.y = event.clientY; const svgX = cursor.matrixTransform(matrix.inverse()).x; setActive(data.reduce((best, _, index) => Math.abs(x(index) - svgX) < Math.abs(x(best) - svgX) ? index : best, 0)); }; const point = active === null ? undefined : data[active], curveDate = data[0]?.observationDate; return <div className="yield-curve"><div className="yield-chart"><svg viewBox="0 0 720 215" role="img" aria-label={`미국 국채 수익률곡선 공통 기준일 ${curveDate}`} onPointerMove={select} onPointerDown={select} onPointerLeave={() => setActive(null)}>{[0, 1, 2, 3].map(step => { const value = max - (max - min) * step / 3, py = y(value); return <g key={step}><line x1="52" x2="668" y1={py} y2={py} /><text x="5" y={py + 4}>{value.toFixed(2)}%</text></g>; })}<path className="yield-area" d={`${smoothPath} L 668 165 L 52 165 Z`} /><path className="yield-line" d={smoothPath} />{data.map((item, index) => <g key={item.label}><circle cx={x(index)} cy={y(item.value)} r={active === index ? 5 : 3.5} /><text x={x(index)} y="198" textAnchor="middle">{item.label}</text></g>)}{point && <line className="yield-crosshair" x1={x(active!)} x2={x(active!)} y1="20" y2="165" />}</svg>{point && <div className={`yield-tooltip ${active! > data.length / 2 ? "align-left" : ""}`} style={{ left: `${x(active!) / 720 * 100}%` }}><strong>{point.label} Treasury</strong><b>{point.value.toFixed(2)}%</b><span>공통 기준일 {point.observationDate}</span></div>}</div></div>; }
 function MiniChart({ title, data }: { title: string; data: MacroPoint[] }) { const [activeIndex, setActiveIndex] = useState<number | null>(null); const values = data.map(item => item.value), min = Math.min(...values), max = Math.max(...values); const coords = values.map((value, index) => `${index * 100 / Math.max(1, values.length - 1)},${90 - (value - min) / Math.max(1, max - min) * 70}`).join(" "); const change = values.length > 1 ? (values.at(-1)! / values[0] - 1) * 100 : 0; const selectPoint = (event: PointerEvent<SVGSVGElement>) => { const bounds = event.currentTarget.getBoundingClientRect(); setActiveIndex(Math.max(0, Math.min(data.length - 1, Math.round((event.clientX - bounds.left) / bounds.width * Math.max(1, data.length - 1))))); }; const point = activeIndex === null ? undefined : data[activeIndex]; const pointChange = point && values[0] ? (point.value / values[0] - 1) * 100 : 0; return <div className="fx-mini"><header><div><span>{title}</span><small>{dateLabel(data[0]?.label ?? "")} → {dateLabel(data.at(-1)?.label ?? "")}</small></div><strong>{change > 0 ? "+" : ""}{change.toFixed(1)}%</strong></header><div className="fx-chart-wrap"><svg viewBox="0 0 100 100" preserveAspectRatio="none" onPointerMove={selectPoint} onPointerDown={selectPoint} onPointerLeave={() => setActiveIndex(null)}><polygon points={`0,100 ${coords} 100,100`} /><polyline points={coords} />{point && <g className="fx-hover"><line x1={activeIndex! * 100 / Math.max(1, data.length - 1)} x2={activeIndex! * 100 / Math.max(1, data.length - 1)} y1="10" y2="100" /><circle cx={activeIndex! * 100 / Math.max(1, data.length - 1)} cy={90 - (point.value - min) / Math.max(1, max - min) * 70} r="2.5" /></g>}</svg>{point && <div className={`fx-tooltip ${activeIndex! > data.length / 2 ? "align-left" : ""}`} style={{ left: `${activeIndex! * 100 / Math.max(1, data.length - 1)}%` }}><strong>{point.label}</strong><b>{point.value.toLocaleString(undefined, { maximumFractionDigits: 4 })}</b><span>기간 시작 대비 {pointChange >= 0 ? "+" : ""}{pointChange.toFixed(2)}%</span></div>}</div></div>; }
 
